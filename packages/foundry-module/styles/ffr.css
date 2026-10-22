@@ -1,0 +1,8 @@
+#ffr-badge {
+  position: fixed; top: 4px; left: 50%; transform: translateX(-50%); z-index: 1000;
+  padding: 1px 8px; border-radius: 10px; font: 11px/16px var(--font-sans, sans-serif);
+  background: rgba(0, 0, 0, .55); color: #ddd; cursor: pointer; user-select: none; pointer-events: auto;
+}
+#ffr-badge[data-state="rec"] { color: #ff6b6b; }
+#ffr-badge[data-state="optout"] { color: #aaa; }
+#ffr-badge:focus-visible { outline: 2px solid #fff; }

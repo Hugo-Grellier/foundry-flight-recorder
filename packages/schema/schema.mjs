@@ -27,7 +27,7 @@ export const EVENT_TYPES = Object.freeze({
   "rec.start": { lvl: 0 }, "rec.stop": { lvl: 0 }, "rec.consent": { lvl: 0 }, "rec.mode": { lvl: 0 },
   "rec.loss": { lvl: 0 }, "rec.selferror": { lvl: 0 }, "rec.adapter": { lvl: 0 },
   "client.load": { lvl: 0 }, "client.unload": { lvl: 0 }, "client.visibility": { lvl: 0 }, "client.idle": { lvl: 0 },
-  "env.snapshot": { lvl: 0 },
+  "env.snapshot": { lvl: 0 }, "env.modules": { lvl: 0 }, "env.settings": { lvl: 0 },
   "net.socket": { lvl: 0 }, "net.online": { lvl: 0 }, "user.connection": { lvl: 0 },
   "err.js": { lvl: 0 }, "err.promise": { lvl: 0 }, "err.foundry": { lvl: 0 }, "err.console": { lvl: 0 },
   "warn.console": { lvl: 1 }, "ui.notify": { lvl: 0 },
@@ -41,7 +41,7 @@ export const EVENT_TYPES = Object.freeze({
   "pf2e.turn": { lvl: 0 }, "pf2e.check": { lvl: 0 }, "pf2e.reroll": { lvl: 0 }, "pf2e.damage": { lvl: 0 },
   "pf2e.condition": { lvl: 0 }, "pf2e.action": { lvl: 0 },
   "perf.window": { lvl: 0 }, "perf.stall": { lvl: 0 }, "perf.loaf": { lvl: 1 }, "perf.hooks": { lvl: 2 },
-  "friction.mark": { lvl: 0 },
+  "friction.mark": { lvl: 0 }, "dsn.roll": { lvl: 1 },
 });
 
 export const TYPE_RE = /^[a-z][a-z0-9]*(\.[a-z0-9_-]+){1,3}$/;
