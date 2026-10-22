@@ -79,7 +79,12 @@ export function createCollector(cfg) {
       let size = 0; const chunks = [];
       req.on("data", (c) => {
         size += c.length;
-        if (size > limit) { reject(Object.assign(new Error("too large"), { code: 413 })); req.destroy(); return; }
+        if (size > limit) {
+          // stop buffering but keep draining so the client gets a clean 413 instead of a reset
+          req.removeAllListeners("data"); req.resume();
+          reject(Object.assign(new Error("too large"), { code: 413 }));
+          return;
+        }
         chunks.push(c);
       });
       req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
@@ -107,7 +112,7 @@ export function createCollector(cfg) {
 
     let raw;
     try { raw = await readBody(req, LIMITS.batchBytes); }
-    catch (e) { refuse("size"); return send(res, e.code === 413 ? 413 : 400, { error: e.message }); }
+    catch (e) { refuse("size"); return send(res, e.code === 413 ? 413 : 400, { error: e.message }, { Connection: "close" }); }
     let body;
     try { body = JSON.parse(raw); } catch { refuse("json"); return send(res, 400, { error: "invalid json" }); }
 

@@ -26,8 +26,9 @@ const TRIGGERS = new Set(["err.js", "err.promise", "err.foundry", "err.console",
 class Bucket {
   constructor(rate, burst) { this.rate = rate; this.burst = burst; this.tokens = burst; this.at = 0; }
   take(now) {
-    this.tokens = Math.min(this.burst, this.tokens + ((now - this.at) / 1000) * this.rate);
-    this.at = now;
+    // clamp: wall clocks can jump backwards (NTP); never let that drain the bucket
+    this.tokens = Math.min(this.burst, this.tokens + (Math.max(0, now - this.at) / 1000) * this.rate);
+    this.at = Math.max(this.at, now);
     if (this.tokens < 1) return false;
     this.tokens -= 1;
     return true;

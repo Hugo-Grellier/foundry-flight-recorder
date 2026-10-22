@@ -26,13 +26,14 @@ CREATE TABLE IF NOT EXISTS batches (
   recv INTEGER, sent_at INTEGER, n INTEGER, dups INTEGER, rejected INTEGER, dropped INTEGER
 );
 CREATE TABLE IF NOT EXISTS events (
-  id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  id TEXT NOT NULL, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   client_id TEXT NOT NULL, user TEXT, seq INTEGER NOT NULL,
   type TEXT NOT NULL, cat TEXT NOT NULL, sev TEXT,
   t INTEGER NOT NULL, tc INTEGER NOT NULL, recv INTEGER NOT NULL, mono REAL,
   scene TEXT, combat_id TEXT, round INTEGER, turn INTEGER,
   corr TEXT, parent TEXT, span_id TEXT, span_ph TEXT, span_out TEXT, span_kind TEXT,
-  dk TEXT, local INTEGER, mode TEXT, sample TEXT, src TEXT, data TEXT
+  dk TEXT, local INTEGER, mode TEXT, sample TEXT, src TEXT, data TEXT,
+  PRIMARY KEY (session_id, id)
 );
 CREATE INDEX IF NOT EXISTS ev_session_time ON events(session_id, tc);
 CREATE INDEX IF NOT EXISTS ev_session_type ON events(session_id, type);
