@@ -64,7 +64,7 @@ floods; counts are reported in `rec.loss.data.sampledOut`. Triggers are never sa
 | `client.idle` | 0 | each | span; idle after 90 s without input |
 | `env.snapshot` | 0 | each | foundry/system/world, browser, gpu, perf support, fingerprints `fp{core,modules,settings,all}` |
 | `env.modules` / `env.settings` | 0 | each | chunks of `{id: version}` / `{"ns.key": value}` (filtered, see privacy) |
-| `err.js` / `err.promise` / `err.foundry` / `err.console` | 0 | each | msg, stack, origins (modules), versions, fp (fingerprint), file/line, location |
+| `err.js` / `err.promise` / `err.foundry` / `err.console` | 0 | each | msg, stack, top (package of the throw site), origins (all packages in the stack), versions, fp (fingerprint), file/line, location |
 | `warn.console` | 1 | each | same as errors |
 | `ui.notify` | 0 (info: 1) | each | kind, msg (rendered notification text) |
 | `ui.app.open` / `ui.app.close` | 0 | each | span; cls, appId, doc ref, title |

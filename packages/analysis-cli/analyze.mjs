@@ -248,7 +248,7 @@ export function errors(db, sid, { module, grep, limit = 50 } = {}) {
     if (grep && !new RegExp(grep, "i").test(`${d.msg ?? ""} ${d.stack ?? ""}`)) continue;
     const key = d.fp ?? `${e.type}|${d.kind ?? ""}|${String(d.msg ?? "").slice(0, 120)}`;
     let g = groups.get(key);
-    if (!g) groups.set(key, (g = { fingerprint: key, type: e.type, sev: e.sev, msg: d.msg, origins: d.origins ?? [], versions: d.versions ?? {}, count: 0, clients: new Set(), users: new Set(), scenes: new Set(), first: e, last: e, ids: [], stack: d.stack ? String(d.stack).split("\n").slice(0, 8).join("\n") : null, location: d.location ?? d.file ?? null }));
+    if (!g) groups.set(key, (g = { fingerprint: key, type: e.type, sev: e.sev, msg: d.msg, throwSite: d.top ?? null, origins: d.origins ?? [], versions: d.versions ?? {}, count: 0, clients: new Set(), users: new Set(), scenes: new Set(), first: e, last: e, ids: [], stack: d.stack ? String(d.stack).split("\n").slice(0, 8).join("\n") : null, location: d.location ?? d.file ?? null }));
     g.count++; g.clients.add(e.client_id); g.users.add(e.user); if (e.scene) g.scenes.add(e.scene); g.last = e;
     if (g.ids.length < 10) g.ids.push(e.id);
   }
@@ -447,7 +447,8 @@ export function anomalies(db, sid) {
   const add = (severity, kind, summary, evidence, extra = {}) => out.push({ severity, kind, summary, evidence: evidence.slice(0, 12), ...extra });
   for (const g of errors(db, sid)) {
     if (!g.type.startsWith("err")) continue;
-    add(g.count >= 5 || g.users.length > 1 ? "high" : "medium", "error", `${g.type} x${g.count} (${g.users.length} user(s)) origin=${g.origins[0] ?? "unknown"}: ${String(g.msg).slice(0, 140)}`, g.ids, { origins: g.origins, versions: g.versions });
+    const where = g.throwSite ? `thrown in ${g.throwSite}` : `throw site not in a package${g.origins.length ? `; packages in stack: ${g.origins.join(", ")}` : ""}`;
+    add(g.count >= 5 || g.users.length > 1 ? "high" : "medium", "error", `${g.type} x${g.count} (${g.users.length} user(s)) ${where}: ${String(g.msg).slice(0, 140)}`, g.ids, { throwSite: g.throwSite, origins: g.origins, versions: g.versions });
   }
   for (const g of errors(db, sid).filter((g) => g.type === "ui.notify")) {
     add(g.count >= 3 ? "medium" : "low", "warning-notification", `UI ${g.sev} shown x${g.count}: "${String(g.msg).slice(0, 140)}"`, g.ids);

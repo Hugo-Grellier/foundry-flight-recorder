@@ -176,6 +176,15 @@ export function originsFromStack(stack) {
   return out;
 }
 
+/**
+ * Package of the top stack frame (the throw site), or null when that frame is not module/system code.
+ * Lower frames often belong to wrappers (libWrapper, timer/hook patches) and are only "involved".
+ */
+export function topOrigin(stack) {
+  const frame = String(stack ?? "").split("\n").find((l) => /^\s*at\s|@/.test(l));
+  return frame ? originsFromStack(frame)[0] ?? null : null;
+}
+
 // Error fingerprint: message with volatile parts (ids, numbers, quoted names) normalized.
 export function errorFingerprint(message, origin = "") {
   const norm = String(message ?? "")

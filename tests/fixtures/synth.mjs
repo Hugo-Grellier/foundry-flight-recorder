@@ -148,7 +148,7 @@ async function session(store, { id, t0, variant }) {
         w.at(t + 15); p1.e("ui.click", { tag: "button", cls: "CharacterSheetPF2e", classes: "toolbelt-share" });
         w.at(t + 16); p1.e("ui.focus", { field: "system.resources.heroPoints.value", kind: "number", cls: "CharacterSheetPF2e" });
         w.at(t + 17);
-        const err = p1.e("err.js", { msg: "Cannot read properties of undefined (reading 'actor')", stack: "TypeError: Cannot read properties of undefined (reading 'actor')\n    at onShare (http://foundry/modules/pf2e-toolbelt/scripts/main.js:1:4521)\n    at HTMLButtonElement.<anonymous> (http://foundry/modules/pf2e-toolbelt/scripts/main.js:1:4402)", origins: ["pf2e-toolbelt"], versions: { "pf2e-toolbelt": "2.1.0" }, fp: "pf2e-toolbelt|Cannot read properties of undefined (reading <s>)" }, { sev: "error" });
+        const err = p1.e("err.js", { msg: "Cannot read properties of undefined (reading 'actor')", stack: "TypeError: Cannot read properties of undefined (reading 'actor')\n    at onShare (http://foundry/modules/pf2e-toolbelt/scripts/main.js:1:4521)\n    at HTMLButtonElement.<anonymous> (http://foundry/modules/pf2e-toolbelt/scripts/main.js:1:4402)", top: "pf2e-toolbelt", origins: ["pf2e-toolbelt"], versions: { "pf2e-toolbelt": "2.1.0" }, fp: "pf2e-toolbelt|Cannot read properties of undefined (reading <s>)" }, { sev: "error" });
         truth.errorId = err.id;
         w.at(t + 18); p1.e("ui.notify", { kind: "error", msg: "An error occurred. See the console (F12)." }, { sev: "error" });
       }

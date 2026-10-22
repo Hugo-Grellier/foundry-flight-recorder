@@ -1,6 +1,6 @@
 // Passive Foundry/browser capture. Every handler is wrapped so a failure here can never
 // propagate into Foundry or another module, and no handler returns a value (never vetoes a hook).
-import { originsFromStack, errorFingerprint } from "./schema.mjs";
+import { originsFromStack, errorFingerprint, topOrigin } from "./schema.mjs";
 import { ref, appFor, appName, appRef, changedPaths, isActiveGM, isSelf, userRef, state } from "./util.mjs";
 
 const IDLE_MS = 90000;
@@ -27,7 +27,8 @@ function errData(msg, stack, extra = {}) {
     const pkg = o.startsWith("system:") ? (game.system?.id === o.slice(7) ? game.system : null) : game.modules?.get(o);
     if (pkg?.version) versions[o] = pkg.version;
   }
-  return { msg: String(msg ?? "").slice(0, 500), stack, origins, versions, fp: errorFingerprint(msg, origins[0]), ...extra };
+  const top = topOrigin(stack);
+  return { msg: String(msg ?? "").slice(0, 500), stack, top, origins, versions, fp: errorFingerprint(msg, top ?? origins[0]), ...extra };
 }
 
 function installErrors(rec, safe, on, opts) {

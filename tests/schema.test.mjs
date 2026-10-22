@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateBatch, validateEvent, sanitize, scrubString, originsFromStack, errorFingerprint, stableStringify, LIMITS } from "../packages/schema/schema.mjs";
+import { validateBatch, validateEvent, sanitize, scrubString, originsFromStack, topOrigin, errorFingerprint, stableStringify, LIMITS } from "../packages/schema/schema.mjs";
 
 const ev = (o = {}) => ({ id: "c1.0", seq: 0, type: "ui.tab", t: 1_791_000_000_000, data: {}, ...o });
 const batch = (o = {}) => ({ v: 1, sessionId: "s1", clientId: "c1", user: "u_x", sentAt: 1_791_000_000_000, batchSeq: 0, events: [ev()], ...o });
@@ -65,4 +65,12 @@ test("error fingerprint normalizes volatile parts", () => {
 
 test("stableStringify is key-order independent", () => {
   assert.equal(stableStringify({ b: 1, a: { d: 2, c: [3] } }), stableStringify({ a: { c: [3], d: 2 }, b: 1 }));
+});
+
+test("top-frame origin distinguishes the throw site from wrappers lower in the stack", () => {
+  const wrapped = "Error: boom\n    at eval (eval at evaluate (:3:1), <anonymous>:1:30)\n    at setTimeout (http://h/modules/music-control/main.js:5:2)";
+  assert.equal(topOrigin(wrapped), null);
+  assert.deepEqual(originsFromStack(wrapped), ["music-control"]);
+  assert.equal(topOrigin("TypeError: x\n    at onShare (http://h/modules/pf2e-toolbelt/main.js:1:2)\n    at y (http://h/systems/pf2e/pf2e.mjs:1:1)"), "pf2e-toolbelt");
+  assert.equal(topOrigin("onShare@http://h/modules/tb/main.js:1:2"), "tb"); // Firefox format
 });
