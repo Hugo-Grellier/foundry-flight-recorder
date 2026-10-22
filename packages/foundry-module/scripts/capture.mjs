@@ -95,8 +95,11 @@ function installNotifications(rec, safe) {
 // ---------------------------------------------------------------------------
 function installUi(rec, safe, on) {
   const spans = new Map(); // app instance -> span
+  // Only real windows: framed AppV2 / pop-out AppV1. Frameless persistent UI (sidebar, players,
+  // hotbar, HUD panels) re-renders constantly and is not a user "opening" anything.
+  const isWindow = (app) => (app instanceof foundry.applications.api.ApplicationV2 ? app.hasFrame !== false : app?.popOut !== false);
   const open = (app) => {
-    if (spans.has(app)) return;
+    if (spans.has(app) || !isWindow(app)) return;
     spans.set(app, rec.span("ui.app", appRef(app), { type: "ui.app.open", local: true }));
   };
   const close = (app) => {
@@ -107,8 +110,12 @@ function installUi(rec, safe, on) {
   };
   on("renderApplicationV2", (app, el, ctx, options) => { if (options?.isFirstRender !== false) open(app); });
   on("closeApplicationV2", (app) => close(app));
-  on("renderApplication", (app) => open(app));      // AppV1 (deprecated but still used by modules)
-  on("closeApplication", (app) => close(app));
+  // AppV1 hooks fire per class of the inheritance chain, but in V14 the chain of V1 document sheets
+  // stops at e.g. ActorSheet (verified: PF2e CharacterSheetPF2e fires renderActorSheet, not renderApplication).
+  for (const base of ["Application", "FormApplication", "DocumentSheet", "ActorSheet", "ItemSheet", "JournalSheet", "Dialog"]) {
+    on(`render${base}`, (app) => open(app));
+    on(`close${base}`, (app) => close(app));
+  }
 
   on("changeSidebarTab", (app) => rec.emit("ui.sidebar", { tab: app?.tabName ?? app?.id ?? String(app) }, { local: true }));
   on("activateCanvasLayer", (layer) => rec.emit("ui.layer", { layer: layer?.options?.name ?? layer?.constructor?.name }, { local: true }));

@@ -171,3 +171,63 @@ test("sanitization happens before queueing", () => {
   assert.equal(e.data.note, "mail me [email]");
   assert.deepEqual(e.data.nested, { ok: 1 });
 });
+
+test("flush during an in-flight send waits, so emit+flush+disable never loses the last events", async () => {
+  const h = harness();
+  h.rec.activate();
+  let release, calls = 0;
+  h.setRespond(() => (calls++ ? { ok: true, status: 200 } : new Promise((r) => { release = () => r({ ok: true, status: 200 }); })));
+  h.rec.emit("ui.tab", { tab: "a" });
+  const first = h.rec.flush();          // in flight, blocked
+  h.rec.emit("session.stop", {});
+  const second = h.rec.flush();         // must wait, then send session.stop
+  await new Promise((r) => setImmediate(r));
+  release();
+  await Promise.all([first, second]);
+  h.rec.disable();
+  assert.ok(h.sent.flatMap((b) => b.events).some((e) => e.type === "session.stop"));
+});
+
+test("disable starts a new client instance: no false sequence gaps, no id collisions", async () => {
+  const h = harness();
+  h.rec.emit("ui.tab", {});
+  h.rec.emit("ui.tab", {});
+  const before = h.rec.clientId;
+  h.rec.disable();
+  assert.notEqual(h.rec.clientId, before);
+  h.rec.configure({ sessionId: "s2" });
+  h.rec.activate();
+  h.rec.emit("ui.tab", {});
+  await h.advance(0);
+  assert.equal(h.sent[0].events[0].seq, 0);
+  assert.equal(h.sent[0].clientId, h.rec.clientId);
+});
+
+test("lifecycle events are never sampled out, ring-only floods do not consume the send budget", async () => {
+  const h = harness();
+  h.rec.activate();
+  for (let i = 0; i < 3000; i++) h.rec.emit("ui.click", { i });            // lvl 1, ring-only in normal mode
+  assert.ok(h.rec.emit("ui.tab", { tab: "x" }).id, "sent-level event still accepted after ring-only flood");
+  for (let i = 0; i < 1000; i++) h.rec.emit("ui.action", { i });           // exhaust buckets
+  assert.ok(h.rec.emit("session.stop", {}).id);
+  assert.ok(h.rec.emit("rec.stop", {}).id);
+});
+
+test("close() persists undeliverable events; next activation re-sends them into the old session", async () => {
+  const h = harness();
+  h.rec.activate();
+  h.setRespond(() => ({ ok: false, status: 503 }));
+  h.rec.emit("session.stop", {});
+  await h.rec.close();
+  assert.equal(h.rec.state, "off");
+  const stored = JSON.parse(h.store.get("ffr.pending"));
+  assert.equal(stored[0].sid, "s1");
+  assert.equal(stored[0].events[0].type, "session.stop");
+  h.setRespond(() => ({ ok: true, status: 200 }));
+  h.rec.configure({ sessionId: "s2" });
+  h.rec.activate();
+  assert.equal(await h.rec.restore(), 1);
+  const resent = h.sent.find((b) => b.restored);
+  assert.equal(resent.sessionId, "s1");
+  assert.equal(resent.events[0].type, "session.stop");
+});

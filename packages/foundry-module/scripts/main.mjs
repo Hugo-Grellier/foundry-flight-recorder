@@ -35,8 +35,8 @@ async function apply() {
   const enabled = get("enabled"), session = get("session"), endpoint = get("endpoint");
   state.includeNames = get("includeNames");
   if (!enabled || !session?.id || !endpoint) {
-    if (rec.state === "active") { rec.emit("rec.stop", { reason: enabled ? "no-session" : "disabled" }); await rec.flush(); }
-    rec.disable(); // no session: keep nothing in memory
+    if (rec.state === "active") rec.emit("rec.stop", { reason: enabled ? "no-session" : "disabled" });
+    await rec.close(); // flush; undeliverable events are persisted for the next activation
     return renderBadge();
   }
   let participation = get("participation");
@@ -46,7 +46,7 @@ async function apply() {
     if (participation) await game.settings.set(MOD, "participation", participation); // re-enters apply via onChange
     return renderBadge();
   }
-  if (participation !== "yes") { rec.disable(); return renderBadge(); }
+  if (participation !== "yes") { rec.disable(); try { localStorage.removeItem(`ffr.pending.${game.world.id}`); } catch {} return renderBadge(); } // opt-out: drop everything
 
   const fresh = rec.state !== "active" || rec.ident.sessionId !== session.id;
   if (rec.state === "active" && rec.ident.sessionId !== session.id) await rec.flush();
@@ -156,7 +156,7 @@ async function startSession(label) {
 async function stopSession() {
   if (!game.user.isGM) return;
   rec.emit("session.stop", { by: "gm" });
-  await rec.flush();
+  await rec.flush(); // apply() -> rec.close() persists anything still undelivered
   await game.settings.set(MOD, "session", null);
 }
 

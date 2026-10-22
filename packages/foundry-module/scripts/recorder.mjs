@@ -18,10 +18,13 @@ const DEFAULTS = {
   escalateCooldownMs: 30000,
   persistBytes: 1024 * 1024,
   beaconBytes: 60 * 1024,
+  fetchTimeoutMs: 15000,
 };
 
 // Event types whose occurrence promotes the ring buffer and escalates to diagnostic mode.
 const TRIGGERS = new Set(["err.js", "err.promise", "err.foundry", "err.console", "perf.stall", "friction.mark"]);
+// Never sampled out: triggers and lifecycle/bookkeeping events the analysis depends on.
+const UNSAMPLED = new Set([...TRIGGERS, "session.start", "session.stop", "rec.start", "rec.stop", "rec.mode", "rec.loss", "rec.adapter", "env.snapshot", "env.modules", "env.settings", "client.load", "client.unload"]);
 
 class Bucket {
   constructor(rate, burst) { this.rate = rate; this.burst = burst; this.tokens = burst; this.at = 0; }
@@ -70,6 +73,7 @@ export class Recorder {
     this.globalBucket = new Bucket(this.o.globalRate, this.o.globalBurst);
     this.counters = { emitted: 0, sent: 0, dropped: 0, droppedUnreported: 0, sampledOut: {}, rejected: 0, failures: 0, selfErrors: 0 };
     this.inFlight = false;
+    this.flushing = null;
     this.backoff = 0;
     this.timer = null;
     this.emitting = false;
@@ -97,19 +101,38 @@ export class Recorder {
     this.#schedule(0);
   }
 
-  /** Stop sending; drop everything not yet sent (used on opt-out / consent refusal). */
+  /**
+   * Stop sending; drop everything not yet sent (opt-out, consent refusal, no session).
+   * The next activation is a new client instance (new id, seq from 0), so dropped pre-session
+   * events never show up as sequence gaps and ids never collide with already-stored ones.
+   */
   disable() {
     this.state = "off";
     this.queue = []; this.ring = []; this.spans.clear();
+    if (this.seq > 0) { this.clientId = `c${rid(10)}`; this.seq = 0; this.batchSeq = 0; }
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
   }
 
-  /** Go back to pending (no session): flush what we have first. */
-  async suspend() {
-    await this.flush();
-    this.state = "pending";
-    this.ring = [];
+  /**
+   * End of a recording period (session stopped, recorder disabled by the GM): try to send everything;
+   * whatever could not be delivered is persisted and re-sent (same ids, same session) on the next
+   * activation, so the session's last events (e.g. session.stop) survive a collector hiccup.
+   */
+  async close() {
+    if (this.state === "active") {
+      await this.flush();
+      if (this.queue.length) {
+        const rest = [];
+        while (this.queue.length) { const { sid, events } = this.#takeBatch(); if (!events.length) break; rest.push({ sid, clientId: this.clientId, user: this.ident.user, events }); }
+        this.persist([...this.#stored(), ...rest]);
+      }
+    }
+    this.disable();
+  }
+
+  #stored() {
+    try { return JSON.parse(this.o.storage?.getItem(this.o.storageKey ?? "ffr.pending") ?? "[]"); } catch { return []; }
   }
 
   /**
@@ -122,8 +145,10 @@ export class Recorder {
     try {
       const t = this.now();
       const lvl = opts.lvl ?? EVENT_TYPES[type]?.lvl ?? 1;
-      // high-volume protection: per-type and global token buckets (triggers are never sampled out)
-      if (!TRIGGERS.has(type)) {
+      const send = lvl <= this.modeLevel;
+      // high-volume protection on what will be sent: per-type and global token buckets.
+      // Ring-only events skip the buckets (the ring is bounded anyway) so they cannot starve sent ones.
+      if (send && !UNSAMPLED.has(type)) {
         let b = this.typeBuckets.get(type);
         if (!b) this.typeBuckets.set(type, (b = new Bucket(this.o.typeRate, this.o.typeBurst)));
         if (!b.take(t) || !this.globalBucket.take(t)) {
@@ -149,7 +174,7 @@ export class Recorder {
       const w = { e, queued: false };
       this.ring.push(w);
       if (this.ring.length > this.o.ringSize) this.ring.shift();
-      if (lvl <= this.modeLevel) this.#enqueue(w);
+      if (send) this.#enqueue(w);
       if (TRIGGERS.has(type)) this.#trigger(type);
       return e;
     } catch (err) {
@@ -240,9 +265,18 @@ export class Recorder {
     };
   }
 
-  /** Send queued events. Resolves when the queue is empty or a send failed. */
+  /**
+   * Send queued events. Resolves when the queue is empty or a send failed. Concurrent callers wait
+   * for the send in flight and then send what remains (so "emit; await flush(); disable()" never loses).
+   */
   async flush() {
-    if (this.state !== "active" || this.inFlight || !this.queue.length) return;
+    while (this.flushing) await this.flushing;
+    if (this.state !== "active" || !this.queue.length) return;
+    this.flushing = this.#flushLoop().finally(() => { this.flushing = null; });
+    return this.flushing;
+  }
+
+  async #flushLoop() {
     this.inFlight = true;
     try {
       this.#reportSampling();
@@ -255,6 +289,7 @@ export class Recorder {
           res = await this.o.fetch(this.endpoint, {
             method: "POST", body: JSON.stringify(env), headers: { "Content-Type": "text/plain" },
             keepalive: JSON.stringify(env).length < this.o.beaconBytes, mode: "cors", credentials: "omit",
+            signal: globalThis.AbortSignal?.timeout?.(this.o.fetchTimeoutMs),
           });
         } catch (err) { res = { ok: false, status: 0 }; }
         this.lastStatus = { ok: res.ok, status: res.status, at: this.now() };
@@ -308,7 +343,7 @@ export class Recorder {
       // Persist even beaconed batches: beacon delivery is not confirmed, the collector dedups by id.
       rest.push({ sid, clientId: this.clientId, user: this.ident.user, events, beaconed: !!ok });
     }
-    this.persist(rest);
+    this.persist([...this.#stored(), ...rest]);
   }
 
   persist(batches) {
