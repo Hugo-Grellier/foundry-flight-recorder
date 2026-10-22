@@ -1,0 +1,18 @@
+{
+  "name": "foundry-flight-recorder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Session flight recorder for Foundry VTT V14 (PF2e): passive client telemetry, self-hosted collector, Codex analysis CLI",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "bin": { "ffr": "packages/analysis-cli/ffr.mjs" },
+  "scripts": {
+    "test": "node --test --test-reporter=spec tests/",
+    "build": "node scripts/build-module.mjs",
+    "collector": "node packages/collector/server.mjs",
+    "ffr": "node packages/analysis-cli/ffr.mjs",
+    "fixtures": "node tests/fixtures/synth.mjs",
+    "load": "node tests/load.mjs",
+    "e2e": "node tests/e2e/foundry-e2e.mjs"
+  }
+}
