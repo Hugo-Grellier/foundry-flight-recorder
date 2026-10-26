@@ -4,7 +4,7 @@ import { installCapture, installEarly, emitSceneSummary } from "./capture.mjs";
 import { installPerf } from "./perf.mjs";
 import { emitEnvironment } from "./env.mjs";
 import { installAdapters } from "./adapters/index.mjs";
-import { FoundryStore, FOUNDRY_ENDPOINT } from "./store.mjs";
+import { FoundryStore } from "./store.mjs";
 import { installHookProfiler } from "./hooks.mjs";
 import { pseudo, state, combatCtx } from "./util.mjs";
 
@@ -19,8 +19,6 @@ const S = (k) => ({ name: `FFR.Settings.${k}.name`, hint: `FFR.Settings.${k}.hin
 function registerSettings() {
   const reg = (k, o) => game.settings.register(MOD, k, { onChange: () => schedule(), ...o });
   reg("enabled", { ...S("enabled"), scope: "world", config: true, type: Boolean, default: false });
-  reg("endpoint", { ...S("endpoint"), scope: "world", config: true, type: String, default: "" }); // empty: files on the Foundry server (store.mjs)
-  reg("ingestKey", { ...S("ingestKey"), scope: "world", config: true, type: String, default: "" });
   reg("mode", { ...S("mode"), scope: "world", config: true, type: String, choices: { normal: "FFR.Mode.normal", detailed: "FFR.Mode.detailed", diagnostic: "FFR.Mode.diagnostic" }, default: "normal" });
   reg("includeNames", { ...S("includeNames"), scope: "world", config: true, type: Boolean, default: true });
   reg("captureConsole", { ...S("captureConsole"), scope: "world", config: true, type: Boolean, default: true });
@@ -36,9 +34,9 @@ function schedule() { applying = applying.then(apply, apply); return applying; }
 
 async function apply() {
   if (!game.ready) return;
-  const enabled = get("enabled"), session = get("session"), endpoint = get("endpoint") || FOUNDRY_ENDPOINT;
+  const enabled = get("enabled"), session = get("session");
   state.includeNames = get("includeNames");
-  if (!enabled || !session?.id || !endpoint) {
+  if (!enabled || !session?.id) {
     if (rec.state === "active") rec.emit("rec.stop", { reason: enabled ? "no-session" : "disabled" });
     hookProf.setTiming(false);
     await rec.close(); // flush; undeliverable events are persisted for the next activation
@@ -55,7 +53,7 @@ async function apply() {
 
   const fresh = rec.state !== "active" || rec.ident.sessionId !== session.id;
   if (rec.state === "active" && rec.ident.sessionId !== session.id) await rec.flush();
-  rec.configure({ endpoint, flushMs: endpoint === FOUNDRY_ENDPOINT ? 15000 : 5000, key: get("ingestKey"), mode: get("mode"), sessionId: session.id, user: pseudo(game.world.id, game.user.id), role: game.user.isGM ? "gm" : "player", world: game.world.id });
+  rec.configure({ mode: get("mode"), sessionId: session.id, user: pseudo(game.world.id, game.user.id), role: game.user.isGM ? "gm" : "player", world: game.world.id });
   if (fresh) {
     rec.activate();
     rec.emit("rec.start", { session: session.id, label: session.label ?? null, version: RECORDER_VERSION, adapters, reload: performance.now() < 120000 });
@@ -111,7 +109,7 @@ async function openMenu() {
   const lines = [
     `${L("Menu.session")} : <b>${session?.id ?? L("Menu.none")}</b>${session?.label ? ` — ${foundry.utils.escapeHTML(session.label)}` : ""}`,
     L("Menu.client", { state: st.state, mode: st.effectiveMode, queue: st.queue, sent: st.sent, dropped: st.dropped }),
-    `${L("Menu.collector")} : ${st.lastStatus.ok === null ? L("Menu.notContacted") : st.lastStatus.ok ? L("Menu.ok") : L("Menu.failing", { status: st.lastStatus.status || "network", s: Math.round(st.backoffMs / 1000) })}`,
+    `${L("Menu.storage")} : ${st.lastStatus.ok === null ? L("Menu.notContacted") : st.lastStatus.ok ? L("Menu.ok") : L("Menu.failing", { status: st.lastStatus.status || L("Menu.noRelay"), s: Math.round(st.backoffMs / 1000) })}`,
   ];
   const r = await DialogV2.wait({ window: { title: L("Menu.title") }, content: `<p>${lines.join("<br>")}</p>`, buttons, rejectClose: false });
   if (r === "friction") openFriction();
@@ -180,8 +178,8 @@ store = new FoundryStore({
   pseudo: (userId) => pseudo(game.world.id, userId),
 });
 rec = new Recorder({
-  fetch: (u, i) => (u === FOUNDRY_ENDPOINT ? store.send(u, i) : window.fetch(u, i)),
-  beacon: (u, body) => u !== FOUNDRY_ENDPOINT && (navigator.sendBeacon?.(u, new Blob([body], { type: "text/plain" })) ?? false),
+  send: (body) => store.send(body),
+  flushMs: 15000, // one file per batch on the server: keep the file count low
   storage: window.localStorage, // storageKey: set at init, once the world is known
   context: () => ({ scene: globalThis.canvas?.scene?.id, combat: combatCtx() }),
 });

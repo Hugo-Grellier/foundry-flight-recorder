@@ -51,3 +51,9 @@ See docs/architecture.md (ADR log).
 - Docker packaging removed (collector stays as an optional Node process). Prod collector, its Traefik route
   (homelab revert 9d111d6) and the prod module copy removed; the module is to be reinstalled from the manifest.
   Final prod DB (2 sessions) kept outside the repo.
+- Collector removed entirely (Hugo: no collector options left). Module settings `endpoint`/`ingestKey` gone;
+  recorder transport is `send(body)` to store.mjs only (no sendBeacon/CORS). Storage moved from the module
+  folder to `Data/flight-recorder/` (the lab mounts Data/modules read-only; updates must not touch it).
+  `ffr import` logic lives in analysis-cli/db.mjs (importStorage), reused by tools/maxi-runner.mjs
+  (`importRecordings`; `startCollector` removed, `configure(page, {player, mode})`). e2e reworked to import the
+  files from FFR_DATA_DIR; not run (lab frozen).

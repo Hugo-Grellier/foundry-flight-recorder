@@ -1,18 +1,18 @@
 # Architecture and decisions
 
 ```
- player/GM browsers (Foundry V14 client)              host (next to Foundry)
- ┌──────────────────────────────────────┐   HTTPS    ┌───────────────────────────┐
- │ foundry-flight-recorder module       │  POST      │ collector (node:http)     │
- │  capture.mjs  hooks/DOM/errors       │ /v1/ingest │  validate → sanitize →    │
- │  perf.mjs     rAF, LoAF, longtask    │──────────▶ │  SQLite (node:sqlite, WAL)│
- │  adapters/    pf2e, dice-so-nice     │  append    │  ingest-only, no reads    │
- │  recorder.mjs ring, queue, batching, │  only key  └─────────────┬─────────────┘
- │               retry, persistence     │                          │ local file access
- └──────────────────────────────────────┘             ┌────────────▼─────────────┐
-                                                      │ ffr CLI (analysis-cli)    │
-                                                      │ ← Codex / GM (AGENTS.md)  │
-                                                      └───────────────────────────┘
+ player/GM browsers (Foundry V14 client)                     Foundry server
+ ┌──────────────────────────────────────┐  upload (players   ┌──────────────────────────────┐
+ │ foundry-flight-recorder module       │  with Upload Files │ Data/flight-recorder/        │
+ │  capture.mjs  hooks/DOM/errors       │  permission, and   │  <world>/<session>/<user>/   │
+ │  hooks.mjs    attribution, vetoes    │  the GM) ─────────▶│   <client>-<seq>.json        │
+ │  perf.mjs     rAF, LoAF, longtask    │                    └──────────────┬───────────────┘
+ │  adapters/    pf2e, dice-so-nice     │  other players:                   │ rsync -a (copy)
+ │  recorder.mjs ring, queue, batching, │  module socket → GM               ▼
+ │               retry, persistence     │  (GM writes for them)  ┌─────────────────────────────┐
+ │  store.mjs    file writes / relay    │                        │ ffr import → SQLite          │
+ └──────────────────────────────────────┘                        │ ffr CLI ← Codex / GM         │
+                                                                 └─────────────────────────────┘
 ```
 
 ## Components
@@ -21,9 +21,8 @@
 |---|---|
 | `packages/schema/schema.mjs` | envelope/event validation, limits, sanitization, error fingerprint, module attribution |
 | `packages/foundry-module/` | Foundry module (`module.json`, `scripts/*.mjs`, no bundler, no dependency) |
-| `packages/collector/` | `server.mjs` HTTP ingest, `db.mjs` storage + admin ops (retention, deletion, finalize) |
-| `packages/analysis-cli/` | `analyze.mjs` deterministic analyses, `ffr.mjs` CLI |
-| `tests/` | `node:test` suites, `fixtures/synth.mjs` synthetic sessions, `load.mjs`, `e2e/` real Foundry run |
+| `packages/analysis-cli/` | `db.mjs` SQLite import + admin ops (retention, deletion, finalize), `analyze.mjs` deterministic analyses, `ffr.mjs` CLI |
+| `tests/` | `node:test` suites, `fixtures/synth.mjs` synthetic sessions, `e2e/` real Foundry run |
 
 ## Decisions (ADR log)
 
@@ -33,15 +32,16 @@
    *Trade-off:* no TypeScript type checking; `node:sqlite` prints an ExperimentalWarning (suppressed).
    *Revisit:* if the codebase grows past a few thousand lines, add JSDoc `// @ts-check` + `tsc --noEmit`.
 2. **One shared schema module.** The browser and server import the same file (`scripts/schema.mjs` is a
-   symlink; the build materializes it). Sanitization runs twice: client before queueing, server on ingest.
-3. **Ingest-only HTTP; administration through local CLI.** The ingest key is visible in every browser
-   (world setting), so it only appends. Reading, exporting, deleting require shell access to the DB file.
-   No admin web UI exists to secure.
+   symlink; the build materializes it). Sanitization runs twice: client before queueing, again on `ffr import`.
+3. **No server of our own; administration through the local CLI.** Batches are files on the Foundry server
+   (ADR 13); reading, exporting and deleting happen on a copy, with `ffr`. No web endpoint or admin UI to secure.
+   *History:* 0.1.x shipped an ingest-only HTTP collector (Docker); removed 2026-10-26 at Hugo's request.
 4. **SQLite as the index, JSONL as export.** One file per deployment, WAL mode; `ffr export` produces
    time-ordered JSONL. No separate append-only archive (would double writes for little gain).
 5. **Event ids = `clientId.seq`**, seq assigned when an event is queued. Retries and unload re-sends are
    idempotent; sequence gaps measure real loss (sent-but-lost or dropped), not filtering.
-6. **Clock skew**: per client instance, `skew = min(recv − sentAt)`; `tc = t + skew`. Bounded error =
+6. **Clock skew**: per client instance, `skew = min(recv − sentAt)`, recv = the batch file's modification
+   time (written by the Foundry server's clock); `tc = t + skew`. Bounded error =
    network latency of the fastest batch. Ordering: `tc` across clients, `seq`/`mono` within a client.
 7. **Duplicates across clients** are explicit: `local` (initiator vs observer) + `dk` dedup key; analysis
    dedups, storage keeps every observation.
@@ -59,15 +59,17 @@
     ignores it; libWrapper's `[Detected packages]` note may list `foundry-flight-recorder`). Timing suspends
     itself above 2 % overhead or when another tool replaces `Hooks.call`/`callAll` (2026-10-26, Hugo).
 11. **No dashboard.** The analyst is Codex with a CLI; humans read the generated report.
-13. **Collector-less default storage** (module persistent storage on the Foundry server). Modules run no
+12. **Persistence at page close**: unsent batches go to localStorage on `pagehide` and are re-sent (same
+    ids) by the next page load.
+13. **Storage = files on the Foundry server** (`Data/flight-recorder`, not the module folder: some installs
+    mount `Data/modules` read-only, and module updates must not touch recordings). Modules run no
     server code, so the only server writes available are Foundry's own upload endpoint (permission
     *Upload Files*, global) and world documents (would bloat the world database and broadcast changes).
     Clients that may upload write their own batch files, one per batch (non-media files cannot be
     overwritten: "already exists" on retry means stored); others relay over the module socket to the active
     GM only, who writes and acks. *Why:* running an extra server and a reverse proxy kills adoption.
     *Trade-off:* Foundry serves `Data/` publicly (unguessable names, but browsable with *Browse File
-    Explorer*); recording of non-uploading players needs a GM online; no retention. The collector stays.
-12. **Text/plain JSON POST** avoids CORS preflight; `sendBeacon` + localStorage persistence on `pagehide`.
+    Explorer*); recording of non-uploading players needs a GM online; no automatic retention.
 
 ## Foundry V14 / PF2e integration points (verified)
 

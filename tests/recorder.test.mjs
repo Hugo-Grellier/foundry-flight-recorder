@@ -14,17 +14,17 @@ function harness(opts = {}) {
     now: () => now, mono: () => now % 1e6,
     setTimer: (f, ms) => { const h = { f, at: now + ms }; timers.push(h); return h; },
     clearTimer: (h) => { const i = timers.indexOf(h); if (i >= 0) timers.splice(i, 1); },
-    fetch: async (url, init) => { const body = JSON.parse(init.body); sent.push(body); return respond(body); },
-    beacon: () => true,
+    send: async (text) => { const body = JSON.parse(text); sent.push(body); return respond(body); },
     storage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) },
     ...opts,
   });
-  rec.configure({ endpoint: "http://c/v1/ingest", key: "k", sessionId: "s1", user: "u_1", role: "player", world: "w" });
+  rec.configure({ sessionId: "s1", user: "u_1", role: "player", world: "w" });
   return {
     rec, sent, store, timers,
     advance: async (ms) => {
       now += ms;
       for (const h of timers.filter((h) => h.at <= now)) { timers.splice(timers.indexOf(h), 1); await h.f(); }
+      await new Promise((r) => setImmediate(r)); // let sends started by those timers settle
     },
     setRespond: (f) => { respond = f; },
   };
@@ -79,7 +79,7 @@ test("retry with backoff on 5xx/network, no retry on 4xx (no infinite loop)", as
   for (let i = 0; i < 10 && h.rec.queue.length; i++) await h.advance(5000);
   assert.equal(h.rec.queue.length, 0);
   assert.equal(h.rec.counters.sent, 1);
-  // ids are stable across retries -> collector dedups
+  // ids are stable across retries -> import dedups
   const ids = h.sent.map((b) => b.events[0].id);
   assert.equal(new Set(ids).size, 1);
 
@@ -232,23 +232,20 @@ test("close() persists undeliverable events; next activation re-sends them into 
   assert.equal(resent.events[0].type, "session.stop");
 });
 
-test("a hung send is aborted by the fetch timeout and retried (no permanently stuck flush)", async () => {
+test("a hung send times out and is retried (no permanently stuck flush)", async () => {
   let calls = 0;
   const h = harness({
-    fetchTimeoutMs: 50,
-    fetch: (url, init) => new Promise((resolve, reject) => {
-      calls++;
-      if (calls === 1) init.signal.addEventListener("abort", () => reject(new DOMException("timeout", "TimeoutError")));
-      else resolve({ ok: true, status: 200 });
-    }),
+    sendTimeoutMs: 50,
+    send: () => (++calls === 1 ? new Promise(() => {}) : Promise.resolve({ ok: true, status: 200 })), // first upload never settles
   });
   h.rec.activate();
   h.rec.emit("session.stop", {});
-  const keepAlive = setTimeout(() => {}, 2000); // Node unrefs AbortSignal.timeout timers
-  await h.rec.flush();                     // first attempt hangs until the 50 ms timeout aborts it
-  clearTimeout(keepAlive);
+  const first = h.rec.flush();
+  h.timers.pop().f();                       // only the 50 ms send timeout fires (the latest timer)
+  await first;
   assert.equal(h.rec.counters.failures, 1);
   assert.equal(h.rec.queue.length, 1, "event kept for retry");
+  await h.advance(70000);                   // backoff elapsed: retried
   await h.rec.flush();
   assert.equal(h.rec.queue.length, 0);
   assert.equal(calls, 2);

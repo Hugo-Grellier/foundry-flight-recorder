@@ -17,8 +17,7 @@ const DEFAULTS = {
   escalateMs: 60000,                 // diagnostic window after error/stall/friction
   escalateCooldownMs: 30000,
   persistBytes: 1024 * 1024,
-  beaconBytes: 60 * 1024,
-  fetchTimeoutMs: 15000,
+  sendTimeoutMs: 20000,
 };
 
 // Event types whose occurrence promotes the ring buffer and escalates to diagnostic mode.
@@ -43,9 +42,8 @@ const rid = (n = 10) => Array.from({ length: n }, () => "abcdefghijklmnopqrstuvw
 export class Recorder {
   /**
    * @param {object} o
-   * @param {(url:string, init:object)=>Promise<{ok:boolean,status:number}>} o.fetch
+   * @param {(body:string)=>Promise<{ok:boolean,status:number}>} o.send  transport (store.mjs: file on the Foundry server)
    * @param {{getItem:Function,setItem:Function,removeItem:Function}} [o.storage]  crash persistence (localStorage)
-   * @param {(url:string, body:string)=>boolean} [o.beacon]  navigator.sendBeacon wrapper
    * @param {()=>object} [o.context]   per-event context provider ({scene, combat})
    * @param {()=>number} [o.now] @param {()=>number} [o.mono]
    * @param {(fn:Function, ms:number)=>any} [o.setTimer] @param {(h:any)=>void} [o.clearTimer]
@@ -59,8 +57,6 @@ export class Recorder {
     this.clientId = o.clientId ?? `c${rid(10)}`;
     this.state = "pending"; // pending: queue locally, send nothing | active: send | off: drop everything
     this.ident = { sessionId: null, user: null, role: null, world: null };
-    this.endpoint = o.endpoint ?? null;
-    this.key = o.key ?? "";
     this.mode = o.mode ?? "normal";
     this.baseMode = this.mode;
     this.escalatedUntil = 0;
@@ -84,10 +80,7 @@ export class Recorder {
   get modeLevel() { return MODES[this.effectiveMode()] ?? 0; }
   effectiveMode() { return this.now() < this.escalatedUntil ? "diagnostic" : this.mode; }
 
-  configure({ endpoint, key, mode, sessionId, user, role, world, flushMs } = {}) {
-    if (endpoint !== undefined) this.endpoint = endpoint;
-    if (flushMs !== undefined) this.o.flushMs = flushMs;
-    if (key !== undefined) this.key = key;
+  configure({ mode, sessionId, user, role, world } = {}) {
     if (mode !== undefined && mode in MODES) { this.mode = mode; this.baseMode = mode; }
     if (sessionId !== undefined) this.ident.sessionId = sessionId;
     if (user !== undefined) this.ident.user = user;
@@ -96,7 +89,7 @@ export class Recorder {
   }
 
   activate() {
-    if (!this.endpoint || !this.ident.sessionId || !this.ident.user) throw new Error("recorder: endpoint/session/user missing");
+    if (!this.ident.sessionId || !this.ident.user) throw new Error("recorder: session/user missing");
     this.state = "active";
     for (const w of this.queue) w.sid ??= this.ident.sessionId; // pre-activation events belong to this session
     this.#schedule(0);
@@ -119,7 +112,7 @@ export class Recorder {
   /**
    * End of a recording period (session stopped, recorder disabled by the GM): try to send everything;
    * whatever could not be delivered is persisted and re-sent (same ids, same session) on the next
-   * activation, so the session's last events (e.g. session.stop) survive a collector hiccup.
+   * activation, so the session's last events (e.g. session.stop) survive a storage hiccup.
    */
   async close() {
     if (this.state === "active") {
@@ -262,7 +255,7 @@ export class Recorder {
   #envelope(sid, events, clientId = this.clientId, user = this.ident.user) {
     const dropped = this.counters.droppedUnreported;
     return {
-      v: SCHEMA_VERSION, key: this.key, sessionId: sid, clientId, user, role: this.ident.role ?? undefined,
+      v: SCHEMA_VERSION, sessionId: sid, clientId, user, role: this.ident.role ?? undefined,
       world: this.ident.world ?? undefined, sentAt: this.now(), batchSeq: this.batchSeq++, dropped, events,
     };
   }
@@ -286,14 +279,7 @@ export class Recorder {
         const { sid, events } = this.#takeBatch();
         if (!events.length) break;
         const env = this.#envelope(sid, events);
-        let res;
-        try {
-          res = await this.o.fetch(this.endpoint, {
-            method: "POST", body: JSON.stringify(env), headers: { "Content-Type": "text/plain" },
-            keepalive: JSON.stringify(env).length < this.o.beaconBytes, mode: "cors", credentials: "omit",
-            signal: globalThis.AbortSignal?.timeout?.(this.o.fetchTimeoutMs),
-          });
-        } catch (err) { res = { ok: false, status: 0 }; }
+        const res = await this.#send(JSON.stringify(env));
         this.lastStatus = { ok: res.ok, status: res.status, at: this.now() };
         if (res.ok) {
           this.counters.sent += events.length;
@@ -314,7 +300,7 @@ export class Recorder {
           }
           break;
         }
-        // 4xx: the collector refused the batch for good (bad key, schema). Never retry: avoids loops.
+        // 4xx: the batch was refused for good (invalid, no permission). Never retry: avoids loops.
         this.counters.rejected += events.length;
       }
     } finally {
@@ -330,20 +316,21 @@ export class Recorder {
     this.emit("rec.loss", { sampledOut: s, dropped: this.counters.droppedUnreported, totalDropped: this.counters.dropped }, { noContext: true, sev: "notice" });
   }
 
-  /**
-   * Page is going away: best-effort sendBeacon of small batches, persist the rest for the next load.
-   */
+  /** A send that never settles (hung upload, GM gone mid-relay) must not block the flush loop forever. */
+  async #send(body) {
+    let timer;
+    const timeout = new Promise((resolve) => { timer = this.setTimer(() => resolve({ ok: false, status: 0 }), this.o.sendTimeoutMs); });
+    try { return await Promise.race([this.o.send(body), timeout]); } catch { return { ok: false, status: 0 }; } finally { this.clearTimer(timer); }
+  }
+
+  /** Page is going away: persist unsent batches; they are re-sent (same ids) on the next load. */
   unload() {
     if (this.state !== "active") return;
     const rest = [];
     while (this.queue.length) {
       const { sid, events } = this.#takeBatch();
       if (!events.length) break;
-      const env = this.#envelope(sid, events);
-      const body = JSON.stringify(env);
-      const ok = body.length < this.o.beaconBytes && this.o.beacon?.(this.endpoint, body);
-      // Persist even beaconed batches: beacon delivery is not confirmed, the collector dedups by id.
-      rest.push({ sid, clientId: this.clientId, user: this.ident.user, events, beaconed: !!ok });
+      rest.push({ sid, clientId: this.clientId, user: this.ident.user, events });
     }
     this.persist([...this.#stored(), ...rest]);
   }
@@ -373,10 +360,8 @@ export class Recorder {
       const env = this.#envelope(b.sid, b.events, b.clientId, b.user);
       env.dropped = 0;
       env.restored = true;
-      try {
-        const res = await this.o.fetch(this.endpoint, { method: "POST", body: JSON.stringify(env), headers: { "Content-Type": "text/plain" }, mode: "cors", credentials: "omit" });
-        if (res.ok) n += b.events.length;
-      } catch { /* lost: reported as a sequence gap on the collector */ }
+      const res = await this.#send(JSON.stringify(env));
+      if (res.ok) n += b.events.length; // else lost: reported as a sequence gap by the analysis
     }
     return n;
   }

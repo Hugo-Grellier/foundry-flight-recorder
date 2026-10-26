@@ -4,36 +4,37 @@
 // (node scripts/build-module.mjs --install <Data>/modules, then enable it); this file never toggles
 // the module set, so perf trials stay untouched when MAXI_FFR is unset.
 //
+// The module writes its batches as files on the Foundry server (<Foundry Data>/flight-recorder); after the
+// run, importRecordings() loads them into a database for `ffr`.
+//
 //   import * as ffr from "<repo>/tools/maxi-runner.mjs";
-//   const rec = await ffr.startCollector({ db: "report/ffr.db" });   // in-process collector
-//   await ffr.configure(page, rec);  await ffr.configure(playerPage, rec, { player: true });
+//   await ffr.configure(page);  await ffr.configure(playerPage, { player: true });
 //   const s = await ffr.start(page, `test ${id}`);  ...run test...  await ffr.stop(page, [playerPage]);
-import { createCollector } from "../packages/collector/server.mjs";
+//   ffr.importRecordings({ dataDir: "<host path of Foundry's Data>", db: "report/ffr.db" });
+import path from "node:path";
+import { openDb, importStorage } from "../packages/analysis-cli/db.mjs";
+import { STORAGE_ROOT } from "../packages/foundry-module/scripts/store.mjs";
 
 const MOD = "foundry-flight-recorder";
 
-/** Start an in-process collector. Returns { endpoint, key, db, close() }. */
-export async function startCollector({ db = "./data/ffr.db", port = 4319, origin = "http://127.0.0.1:30000", key = `runner-${Date.now()}` } = {}) {
-  const col = createCollector({ host: "127.0.0.1", port, db, ingestKey: key, origins: [origin], maxDbMb: 4096, retentionDays: 0, sessionIdleMin: 600, rateRps: 100, rateEventsPerMin: 60000 });
-  await new Promise((r) => col.server.listen(port, "127.0.0.1", r));
-  return { endpoint: `http://127.0.0.1:${port}/v1/ingest`, key, db, stats: col.stats, close: () => new Promise((r) => col.server.close(r)) };
-}
-
 /**
- * Point a client at the collector and opt it in. World settings are written by the GM page only;
- * participation is per user account (user setting, set from that user's own client). Throws if the module is not active in the world.
+ * Opt a client in. World settings are written by the GM page only; participation is per user account
+ * (user setting, set from that user's own client). Throws if the module is not active in the world.
+ * Keep mode "normal" for perf trials: "diagnostic" times every hook listener.
  */
-export async function configure(page, { endpoint, key }, { player = false, mode = "normal" } = {}) {
-  return page.evaluate(async ({ MOD, endpoint, key, player, mode }) => {
+export async function configure(page, { player = false, mode = "normal" } = {}) {
+  return page.evaluate(async ({ MOD, player, mode }) => {
     if (!game.modules.get(MOD)?.active) throw new Error(`${MOD} is not active in this world`);
-    if (!player) {
-      await game.settings.set(MOD, "endpoint", endpoint);
-      await game.settings.set(MOD, "ingestKey", key);
-      await game.settings.set(MOD, "mode", mode);
-    }
+    if (!player) await game.settings.set(MOD, "mode", mode);
     await game.settings.set(MOD, "participation", "yes");
     return true;
-  }, { MOD, endpoint, key, player, mode });
+  }, { MOD, player, mode });
+}
+
+/** Load the recordings written on the Foundry server into `db` (created if missing). Idempotent. */
+export function importRecordings({ dataDir, db = "./data/ffr.db" }) {
+  const d = openDb(db);
+  try { return importStorage(d, [path.join(dataDir, STORAGE_ROOT)]); } finally { d.close(); }
 }
 
 /** GM page: start a session labelled `label`. Returns the session id. */

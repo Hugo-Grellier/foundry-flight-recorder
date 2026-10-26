@@ -19,22 +19,23 @@ function fakeGame({ active = true } = {}) {
 }
 const pageFor = (g) => ({ evaluate: async (fn, arg) => { globalThis.game = g.game; try { return await fn(arg); } finally { delete globalThis.game; } } });
 
-test("collector starts and answers health", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-mr-"));
-  const c = await ffr.startCollector({ db: path.join(dir, "r.db"), port: 0 + 4391 });
-  const h = await (await fetch(c.endpoint.replace("/v1/ingest", "/healthz"))).json();
-  assert.equal(h.ok, true);
-  await c.close();
-});
-
 test("configure writes world settings on GM, only participation on players; refuses inactive module", async () => {
   const gm = fakeGame(), pl = fakeGame();
-  await ffr.configure(pageFor(gm), { endpoint: "http://x/v1/ingest", key: "k" });
-  assert.equal(gm.settings["foundry-flight-recorder.endpoint"], "http://x/v1/ingest");
+  await ffr.configure(pageFor(gm));
+  assert.equal(gm.settings["foundry-flight-recorder.mode"], "normal");
   assert.equal(gm.settings["foundry-flight-recorder.participation"], "yes");
-  await ffr.configure(pageFor(pl), { endpoint: "e", key: "k" }, { player: true });
+  await ffr.configure(pageFor(pl), { player: true });
   assert.deepEqual(Object.keys(pl.settings), ["foundry-flight-recorder.participation"]);
-  await assert.rejects(ffr.configure(pageFor(fakeGame({ active: false })), { endpoint: "e", key: "k" }), /not active/);
+  await assert.rejects(ffr.configure(pageFor(fakeGame({ active: false }))), /not active/);
+});
+
+test("importRecordings loads the files written under <Data>/flight-recorder", () => {
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-mr-"));
+  const dir = path.join(data, "flight-recorder", "w", "s1", "u_a");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "c1-00000000.json"), JSON.stringify({ v: 1, sessionId: "s1", clientId: "c1", user: "u_a", sentAt: 1.7e12, batchSeq: 0, events: [{ id: "c1.0", seq: 0, type: "ui.tab", t: 1.7e12, data: {} }] }));
+  const r = ffr.importRecordings({ dataDir: data, db: path.join(data, "r.db") });
+  assert.equal(r.accepted, 1);
 });
 
 test("start returns the session id; stop flushes players first", async () => {

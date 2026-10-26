@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { openDb, Store } from "../packages/collector/db.mjs";
+import { openDb, Store } from "../packages/analysis-cli/db.mjs";
 import { generate } from "./fixtures/synth.mjs";
 import * as A from "../packages/analysis-cli/analyze.mjs";
 

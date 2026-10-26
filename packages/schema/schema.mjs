@@ -1,4 +1,4 @@
-// Shared telemetry schema: used verbatim by the Foundry module (browser) and the collector (Node).
+// Shared telemetry schema: used verbatim by the Foundry module (browser) and the analysis CLI (Node).
 // Plain ES module, no dependencies, no Node/DOM globals.
 
 export const SCHEMA_VERSION = 1;
@@ -17,7 +17,7 @@ export const LIMITS = Object.freeze({
 // Collection levels: an event is sent when its level <= active mode level.
 export const MODES = Object.freeze({ normal: 0, detailed: 1, diagnostic: 2 });
 
-// Severity ladder shared by recorder, collector and CLI.
+// Severity ladder shared by recorder and CLI.
 export const SEVERITIES = ["debug", "info", "notice", "warn", "error", "critical"];
 
 // Known event types -> default category/level. Adapters may emit other types
@@ -50,7 +50,7 @@ const ID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 export const categoryOf = (type) => type.split(".")[0];
 
 // ---------------------------------------------------------------------------
-// Sanitization (applied client-side before queueing AND server-side on ingest).
+// Sanitization (applied client-side before queueing AND again on import).
 
 // Keys whose values are dropped. "token" alone is NOT here: Foundry tokens are game objects.
 const SENSITIVE_KEY = /passw|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth(oriz|entic)|cookie|bearer|credential|licen[cs]e|^key$|^content$|^html$|^text$|^body$/i;

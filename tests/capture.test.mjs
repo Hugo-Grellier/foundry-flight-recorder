@@ -18,7 +18,7 @@ globalThis.window = new EventTarget();
 delete globalThis.game; // installEarly runs before Foundry's game is ready
 
 const { installEarly, installChat } = await import("../packages/foundry-module/scripts/capture.mjs");
-const rec = new Recorder({ fetch: async () => ({ ok: true, status: 200 }), setTimer: () => null, clearTimer: () => {} });
+const rec = new Recorder({ send: async () => ({ ok: true, status: 200 }), setTimer: () => null, clearTimer: () => {} });
 const queued = () => rec.queue.map((w) => w.e);
 installEarly(rec);
 

@@ -5,7 +5,7 @@
 // Usage: node tests/fixtures/synth.mjs --db ./data/fixture.db
 import { Recorder } from "../../packages/foundry-module/scripts/recorder.mjs";
 import { validateBatch } from "../../packages/schema/schema.mjs";
-import { openDb, Store } from "../../packages/collector/db.mjs";
+import { openDb, Store } from "../../packages/analysis-cli/db.mjs";
 
 const DAY = 86400000;
 
@@ -29,16 +29,17 @@ class Client {
     this.rec = new Recorder({
       now: () => w.V + skew, mono: () => w.V - w.t0, setTimer: () => ({}), clearTimer: () => {},
       context: () => this.ctx, maxQueue,
-      fetch: async (url, init) => {
+      // Stands in for "file written on the Foundry server, imported later" (receive time = write time).
+      send: async (body) => {
         if (this.down || !this.alive) return { ok: false, status: 0 };
-        const b = JSON.parse(init.body); delete b.key;
+        const b = JSON.parse(body);
         const v = validateBatch(b);
         if (!v.ok) return { ok: false, status: 400 };
         w.store.ingest(v.batch, { recv: w.V + 40, rejected: v.rejected.length });
         return { ok: true, status: 200 };
       },
     });
-    this.rec.configure({ endpoint: "http://collector/v1/ingest", key: "k", user, role, world: "pf2e-synth", mode });
+    this.rec.configure({ user, role, world: "pf2e-synth", mode });
     w.clients.push(this);
   }
   join(sessionId, { sceneMs = 3500, scene = "scCrypt", env }) {
@@ -84,7 +85,7 @@ const ENV_B = {
 };
 
 /**
- * One session. variant "A": problems (targeting struggle, injected error, stall, disconnect, collector outage).
+ * One session. variant "A": problems (targeting struggle, injected error, stall, disconnect, storage outage).
  * variant "B": after config changes; smoother.
  */
 async function session(store, { id, t0, variant }) {
@@ -213,7 +214,7 @@ async function session(store, { id, t0, variant }) {
   for (const c of w.clients) c.ctx.combat = undefined;
   await w.flush();
 
-  // --- collector outage for p1 (variant A): its queue (maxQueue 40) overflows and reports the loss
+  // --- storage outage for p1 (variant A): its queue (maxQueue 40) overflows and reports the loss
   if (variant === "A") {
     p1.down = true;
     for (let i = 0; i < 70; i++) { w.at(tt + 60 + i * 3); p1.e("ui.tab", { tab: i % 2 ? "actions" : "spellcasting", group: "primary", cls: "CharacterSheetPF2e" }); await p1.rec.flush(); }

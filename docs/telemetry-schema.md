@@ -1,14 +1,13 @@
 # Telemetry schema (v1)
 
 Source of truth: [`packages/schema/schema.mjs`](../packages/schema/schema.mjs) (shared verbatim by the
-Foundry module and the collector). This page explains it.
+Foundry module and the analysis CLI). This page explains it.
 
-## Batch envelope (client → `POST /v1/ingest`)
+## Batch envelope (one file `Data/flight-recorder/<world>/<session>/<user>/<client>-<seq>.json`)
 
 | Field | Type | Notes |
 |---|---|---|
-| `v` | 1 | schema version; other values are refused (HTTP 400) |
-| `key` | string | ingest key (or header `X-FFR-Key`); removed before storage |
+| `v` | 1 | schema version; other values are refused on import |
 | `sessionId` | id | GM-started session (`YYYYMMDD-HHMM-xxxx`) |
 | `clientId` | id | one per page load (`c` + 10 chars); a reload is a new client instance |
 | `user` | id | pseudonym `u_<hash(worldId:userId)>`, stable per world, no name |
@@ -20,16 +19,17 @@ Foundry module and the collector). This page explains it.
 | `restored` | bool | batch persisted at unload and re-sent by the next page load |
 | `events` | Event[] | ≤ 500, body ≤ 512 KiB |
 
-Body is sent as `text/plain` JSON (a CORS "simple request": no preflight).
+Written by the client itself (Foundry permission *Upload Files*) or, for other players, by the active GM's
+client after a module-socket relay (the GM stamps `user` from the authenticated sender).
 
 ## Event
 
 | Field | Notes |
 |---|---|
-| `id` | `<clientId>.<seq>`, unique per session; the collector dedups on `(session, id)` |
+| `id` | `<clientId>.<seq>`, unique per session; `ffr import` dedups on `(session, id)` |
 | `seq` | per client instance, assigned when an event is queued for sending. Gaps = lost telemetry |
 | `type` | dotted, e.g. `ui.app.open`; category = first segment |
-| `t` | client epoch ms (skewed); collector stores `tc` = corrected time and `recv` |
+| `t` | client epoch ms (skewed); the database stores `tc` = corrected time and `recv` (file write time) |
 | `mono` | `performance.now()` (ms since page load) for intra-client ordering |
 | `sev` | debug, info, notice, warn, error, critical |
 | `scene` | active scene id |
@@ -105,10 +105,10 @@ Refs (`ref()`): `{uuid, doc, type, slug, name?, pc?}`; names only when the world
 
 ## Storage (SQLite)
 
-`sessions`, `clients` (per client instance: counts, skew, dropped), `batches` (ingest log), `events`
-(columns mirror the event, `data` as JSON). See [`packages/collector/db.mjs`](../packages/collector/db.mjs).
+Built by `ffr import`: `sessions`, `clients` (per client instance: counts, skew, dropped), `batches` (import
+log), `events` (columns mirror the event, `data` as JSON). See [`packages/analysis-cli/db.mjs`](../packages/analysis-cli/db.mjs).
 
 ## Versioning
 
 Additive changes (new types, new data fields) keep `v: 1`. A breaking envelope/event change bumps
-`SCHEMA_VERSION`; the collector then needs to accept both during the transition.
+`SCHEMA_VERSION`; `ffr import` then needs to accept both during the transition.

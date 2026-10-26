@@ -1,15 +1,18 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 // REAL runtime validation against a licensed local Foundry V14 + PF2e instance (not part of `npm test`).
-// Drives a GM and a Player browser with Playwright, records a session into an in-process collector,
-// verifies the evidence with the analysis library, measures overhead, then restores the world.
+// Drives a GM and a Player browser with Playwright, records a session (batch files written by Foundry under
+// <Data>/flight-recorder), imports them, verifies the evidence with the analysis library, measures overhead,
+// then restores the world and deletes the session's files.
 //
 // Env: FOUNDRY_URL (default http://127.0.0.1:30000), FFR_PLAYWRIGHT (dir containing node_modules/playwright-core),
-//      FFR_GM_USER (default "Gamemaster"), FFR_PLAYER_USER (default "Joueur"), FFR_GM_PASSWORD.
+//      FFR_GM_USER (default "Gamemaster"), FFR_PLAYER_USER (default "Joueur"), FFR_GM_PASSWORD,
+//      FFR_DATA_DIR (host path of Foundry's Data, default ~/foundry-local-1/data/Data).
 // Run under the lab lock when sharing the instance: flock /tmp/maxi.lock node tests/e2e/foundry-e2e.mjs
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { createCollector } from "../../packages/collector/server.mjs";
+import { openDb, importStorage } from "../../packages/analysis-cli/db.mjs";
+import { STORAGE_ROOT } from "../../packages/foundry-module/scripts/store.mjs";
 import * as A from "../../packages/analysis-cli/analyze.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -17,8 +20,8 @@ const URL_ = process.env.FOUNDRY_URL ?? "http://127.0.0.1:30000";
 const PW_DIR = process.env.FFR_PLAYWRIGHT ?? path.join(process.env.HOME, "dev/personal/foundry-maxi-lab");
 const { chromium } = createRequire(path.join(PW_DIR, "package.json"))("playwright-core");
 const MOD = "foundry-flight-recorder";
-const KEY = "e2e-ingest-key";
-const PORT = 4319;
+const DATA_DIR = process.env.FFR_DATA_DIR ?? path.join(process.env.HOME, "foundry-local-1/data/Data");
+const VERSION = JSON.parse(fs.readFileSync(path.join(root, "packages/foundry-module/module.json"), "utf8")).version;
 const out = path.join(root, "tests/.tmp");
 fs.mkdirSync(out, { recursive: true });
 const dbFile = path.join(out, "e2e.db");
@@ -28,9 +31,6 @@ const log = (...a) => console.log(`[e2e ${new Date().toISOString().slice(11, 19)
 const results = { url: URL_, startedAt: new Date().toISOString(), checks: [], overhead: {}, notes: [] };
 const check = (name, ok, detail = null) => { results.checks.push({ name, ok: !!ok, detail }); log(ok ? "PASS" : "FAIL", name, detail ? JSON.stringify(detail).slice(0, 200) : ""); };
 
-const col = createCollector({ host: "127.0.0.1", port: PORT, db: dbFile, ingestKey: KEY, origins: [new URL(URL_).origin], maxDbMb: 500, retentionDays: 0, sessionIdleMin: 600, rateRps: 50, rateEventsPerMin: 20000 });
-await new Promise((r) => col.server.listen(PORT, "127.0.0.1", r));
-log("collector on", PORT);
 
 const exe = fs.readdirSync(path.join(process.env.HOME, ".cache/ms-playwright")).filter((d) => d.startsWith("chromium-")).sort().pop();
 const browser = await chromium.launch({ executablePath: path.join(process.env.HOME, ".cache/ms-playwright", exe, "chrome-linux64/chrome"), headless: true, args: ["--enable-features=LongAnimationFrameTiming"] });
@@ -115,13 +115,11 @@ if (!original.active) {
 check("module active after enabling", await ev(gm, (MOD) => !!game.modules.get(MOD)?.active, MOD));
 
 // --- configure (world) + consent (client)
-await ev(gm, async ({ MOD, KEY, PORT }) => {
-  await game.settings.set(MOD, "endpoint", `http://127.0.0.1:${PORT}/v1/ingest`);
-  await game.settings.set(MOD, "ingestKey", KEY);
+await ev(gm, async ({ MOD }) => {
   await game.settings.set(MOD, "mode", "normal");
   await game.settings.set(MOD, "participation", "yes");
   await game.settings.set(MOD, "enabled", true);
-}, { MOD, KEY, PORT });
+}, { MOD });
 
 let player = await join(PLAYER);
 await ev(player, async (MOD) => { await game.settings.set(MOD, "participation", "yes"); }, MOD);
@@ -208,7 +206,10 @@ await player.waitForTimeout(2000);
 
 // ---------------------------------------------------------------------------
 // verify with the analysis library
-const db = col.db;
+const db = openDb(dbFile);
+const sessionDir = path.join(DATA_DIR, STORAGE_ROOT);
+results.import = importStorage(db, [sessionDir]);
+check("batch files imported without invalid files", results.import.accepted > 0 && !results.import.invalidFiles.length, results.import);
 const types = Object.fromEntries(db.prepare("SELECT type, COUNT(*) n FROM events WHERE session_id = ? GROUP BY type").all(sessionId).map((r) => [r.type, r.n]));
 results.eventsByType = types;
 const inf = A.info(db, sessionId);
@@ -216,8 +217,8 @@ check("session recorded and ended by GM stop", inf.session.status === "ended" &&
 check("3 client instances (GM, player, player after reload)", inf.clients.length === 3, inf.clients.map((c) => [c.role, c.events]));
 check("env snapshot with real module list", inf.clients.every((c) => c.env?.foundry?.startsWith("14")), inf.clients.map((c) => c.env?.foundry));
 const mods = Object.assign({}, ...A.events(db, sessionId, { types: ["env.modules"], limit: 1000 }).filter((e) => e.user === inf.clients[0].user).map((e) => e.data.modules));
-check("modules snapshot includes pf2e-relevant modules and self", Object.keys(mods).length > 20 && mods[MOD] === "0.1.0", { n: Object.keys(mods).length });
-check("env.settings snapshot present and free of credentials", (types["env.settings"] ?? 0) > 0 && !JSON.stringify(A.events(db, sessionId, { types: ["env.settings"], limit: 1000 }).map((e) => e.data)).includes(KEY));
+check("modules snapshot includes pf2e-relevant modules and self", Object.keys(mods).length > 20 && mods[MOD] === VERSION, { n: Object.keys(mods).length });
+check("env.settings snapshot present and free of credentials", (types["env.settings"] ?? 0) > 0 && !JSON.stringify(A.events(db, sessionId, { types: ["env.settings"], limit: 1000 }).map((e) => e.data)).match(/"[^"]*(key|token|password)[^"]*"\s*:/i));
 for (const t of ["scene.load", "scene.summary", "ui.app.open", "ui.app.close", "ui.tab", "token.target", "combat.start", "combat.turn", "combat.end", "chat.message", "pf2e.check", "err.js", "ui.notify", "friction.mark", "perf.window", "perf.stall", "rec.adapter", "client.unload"]) check(`captured ${t}`, (types[t] ?? 0) > 0, types[t] ?? 0);
 const opens = A.events(db, sessionId, { types: ["ui.app.open"], limit: 500 });
 check("PF2e character sheet (AppV1) open/close captured", opens.some((e) => e.data?.cls === "CharacterSheetPF2e") && A.events(db, sessionId, { types: ["ui.app.close"], limit: 500 }).some((e) => e.data?.cls === "CharacterSheetPF2e"), opens.map((e) => e.data?.cls));
@@ -236,10 +237,9 @@ check("freeze detected (>=1000 ms frame)", stall.some((s) => s.ms >= 1000), stal
 const chk = A.events(db, sessionId, { types: ["pf2e.check"], limit: 50 });
 check("pf2e.check carries context type and actor", chk.some((c) => c.data?.ctype && c.data?.actor), chk.map((c) => [c.data?.ctype, c.data?.outcome]));
 const allData = db.prepare("SELECT data FROM events WHERE session_id = ?").all(sessionId).map((r) => r.data ?? "").join("\n");
-check("no chat content / html / ingest key leaked into storage", !/"content"\s*:|<p>|e2e-ingest-key/.test(allData));
+check("no chat content / html leaked into storage", !/"content"\s*:|<p>/.test(allData));
 const fr = A.friction(db, sessionId);
 check("friction marker stored with context", fr.length === 1 && fr[0].note === "e2e friction marker", fr[0] && { cat: fr[0].category, preceding: fr[0].precedingTypes });
-results.health = col.stats;
 results.anomalies = A.anomalies(db, sessionId).map((a) => `${a.severity} ${a.kind}: ${a.summary}`).slice(0, 25);
 
 // ---------------------------------------------------------------------------
@@ -258,7 +258,7 @@ await ev(gm, async (original) => {
   if (original.scene) await game.scenes.get(original.scene)?.activate();
 }, original);
 await browser.close();
-await new Promise((r) => col.server.close(r));
+for (const w of fs.existsSync(sessionDir) ? fs.readdirSync(sessionDir) : []) fs.rmSync(path.join(sessionDir, w, sessionId), { recursive: true, force: true });
 results.sessionId = sessionId;
 results.passed = results.checks.filter((c) => c.ok).length;
 results.failed = results.checks.filter((c) => !c.ok).length;

@@ -2,8 +2,6 @@
   "FFR": {
     "Settings": {
       "enabled": { "name": "Activer l'enregistreur de session", "hint": "Interrupteur général (MJ). Rien n'est enregistré tant qu'une session n'est pas démarrée ET que chaque participant n'a pas accepté." },
-      "endpoint": { "name": "URL d'ingestion du collecteur", "hint": "Laisser vide pour stocker les enregistrements sur le serveur Foundry (Data/modules/foundry-flight-recorder/storage). Les joueurs ayant la permission « Téléverser des fichiers » écrivent eux-mêmes et enregistrent même sans MJ ; les autres passent par le MJ connecté. Collecteur auto-hébergé optionnel : ex. https://foundry.example.org/ffr/v1/ingest (HTTPS si Foundry est en HTTPS)." },
-      "ingestKey": { "name": "Clé d'ingestion du collecteur", "hint": "Collecteur uniquement. Clé en ajout seul, visible par tous les navigateurs connectés. Elle ne permet ni lire, ni exporter, ni supprimer des données." },
       "mode": { "name": "Mode de collecte", "hint": "normal : faible coût. détaillé : clics génériques, focus, avertissements, calques. diagnostic : tout (activé aussi automatiquement 60 s après une erreur, un gel ou un signalement de friction)." },
       "includeNames": { "name": "Enregistrer les noms", "hint": "Inclut les noms d'acteurs, objets, scènes et fenêtres (aide l'analyse). Désactivé : identifiants et types seulement." },
       "captureConsole": { "name": "Capturer les erreurs/avertissements console", "hint": "Enregistre les messages console.error/warn et leur module d'origine." },
@@ -21,7 +19,7 @@
       "recTip": "Cette session est enregistrée depuis votre client. Cliquez pour les options / signaler une friction.", "optoutTip": "Une session est enregistrée, mais pas depuis votre client.", "idleTip": "Enregistreur inactif." },
     "Menu": { "title": "Enregistreur de session", "friction": "Signaler une friction", "optout": "Arrêter de m'enregistrer", "optin": "Enregistrer mon client", "start": "Démarrer la session", "stop": "Arrêter la session", "close": "Fermer",
       "session": "Session", "none": "aucune", "client": "Client : {state}, mode {mode}, en file {queue}, envoyés {sent}, perdus {dropped}",
-      "collector": "Stockage", "notContacted": "pas encore contacté", "ok": "OK", "failing": "en échec (HTTP {status}), nouvel essai dans {s} s" },
+      "storage": "Stockage", "notContacted": "rien envoyé pour l'instant", "ok": "OK", "failing": "en échec ({status}), nouvel essai dans {s} s", "noRelay": "pas de MJ connecté ou réseau" },
     "Start": { "title": "Démarrer l'enregistrement", "label": "Nom de la session (facultatif)" }
   }
 }

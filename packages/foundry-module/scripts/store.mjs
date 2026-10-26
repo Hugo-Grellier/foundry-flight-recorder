@@ -1,13 +1,13 @@
-// Collector-less storage: each event batch becomes one JSON file in the module's persistent storage on the
-// Foundry server (Data/modules/foundry-flight-recorder/storage/<world>/<session>/<client>-<seq>.json).
+// Storage: each event batch becomes one JSON file on the Foundry server, under the user data root
+// (Data/flight-recorder/<world>/<session>/<participant>/<client>-<seq>.json). Not inside the module folder:
+// some installs mount Data/modules read-only, and module updates never touch this folder.
 // A client whose user may upload files (Foundry permission FILES_UPLOAD) writes its own batches, so it
 // records with or without a GM online; any other client relays its batches to the active GM over the
 // module socket (recipients: that GM only) and retries until a GM acknowledges the write.
 // Foundry specifics are injected so this file is unit-tested under Node.
 import { validateBatch, LIMITS } from "./schema.mjs";
 
-export const STORAGE_ROOT = "modules/foundry-flight-recorder/storage";
-export const FOUNDRY_ENDPOINT = "foundry:"; // Recorder endpoint value selecting this transport
+export const STORAGE_ROOT = "flight-recorder";
 
 // No dots: a path segment can never be "." or ".." (relayed batches are written by the GM).
 const safe = (s) => String(s ?? "_").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80) || "_";
@@ -42,8 +42,8 @@ export class FoundryStore {
     this.relayBudget = new Map(); // sender -> {tokens, at}: a player cannot make the GM write files without bound
   }
 
-  /** Recorder `fetch` replacement. */
-  send = async (url, init) => (this.o.canUpload() ? this.write(JSON.parse(init.body)) : this.relay(init.body));
+  /** Recorder transport: batch JSON -> {ok, status}. */
+  send = async (body) => (this.o.canUpload() ? this.write(JSON.parse(body)) : this.relay(body));
 
   async write(env) {
     const { dir, name } = batchPath(env);

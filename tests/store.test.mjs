@@ -1,4 +1,4 @@
-// Collector-less storage (packages/foundry-module/scripts/store.mjs): direct writes, GM relay, then
+// Storage on the Foundry server (packages/foundry-module/scripts/store.mjs): direct writes, GM relay, then
 // `ffr import` of the written files. Foundry's upload endpoint is emulated with its real V14 rules
 // (target directory must exist, non-media files are never overwritten).
 import { test } from "node:test";
@@ -7,12 +7,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { FoundryStore, FOUNDRY_ENDPOINT, STORAGE_ROOT } from "../packages/foundry-module/scripts/store.mjs";
+import { FoundryStore, STORAGE_ROOT } from "../packages/foundry-module/scripts/store.mjs";
 import { Recorder } from "../packages/foundry-module/scripts/recorder.mjs";
 
 function fakeServer() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-data-"));
-  fs.mkdirSync(path.join(root, "modules/foundry-flight-recorder"), { recursive: true });
   return {
     root,
     mkdir: async (p) => fs.mkdirSync(path.join(root, p)), // throws EEXIST like the server refuses an existing dir
@@ -39,7 +38,7 @@ function table({ playerCanUpload = false, gmOnline = true, timeoutMs = 1000 } = 
 }
 
 const env = (seq, over = {}) => ({ v: 1, sessionId: "s1", clientId: "cabc", user: "u_pl", world: "w", sentAt: 1, batchSeq: seq, dropped: 0, events: [{ id: `cabc.${seq}`, seq, type: "ui.tab", t: 1.7e12, mono: 1, data: {} }], ...over });
-const send = (s, e) => s.send(FOUNDRY_ENDPOINT, { body: JSON.stringify(e) });
+const send = (s, e) => s.send(JSON.stringify(e));
 const files = (srv) => fs.readdirSync(path.join(srv.root, STORAGE_ROOT, "w", "s1", "u_pl")).sort();
 const allFiles = (srv) => fs.readdirSync(srv.root, { recursive: true }).filter((f) => f.endsWith(".json")).sort();
 
@@ -82,8 +81,8 @@ test("no GM online or no answer: retryable failure, nothing written", async () =
 
 test("Recorder over the Foundry store, then `ffr import`: events land in the database, re-import is idempotent", async () => {
   const { srv, player } = table();
-  const rec = new Recorder({ fetch: (u, i) => player.send(u, i), setTimer: () => null, clearTimer: () => {} });
-  rec.configure({ endpoint: FOUNDRY_ENDPOINT, sessionId: "s1", user: "u_pl", role: "player", world: "w" });
+  const rec = new Recorder({ send: player.send, setTimer: () => null, clearTimer: () => {} });
+  rec.configure({ sessionId: "s1", user: "u_pl", role: "player", world: "w" });
   rec.activate();
   rec.emit("session.start", { label: "x" });
   rec.emit("ui.tab", { tab: "actors" });

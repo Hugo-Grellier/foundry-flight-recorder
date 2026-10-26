@@ -27,7 +27,7 @@ Rules:
   (MAP variant) and spell slots.
 - Globally observable events: record on the active GM (`isActiveGM()`) with a `dk` dedup key.
 - Event type: `<prefix>.<name>`, lowercase; document it in `docs/telemetry-schema.md`. Unknown types are
-  accepted by the collector (category = prefix), default level 1 (detailed) unless `lvl` is passed.
+  accepted on import (category = prefix), default level 1 (detailed) unless `lvl` is passed.
 - `detect`/`install` failures are reported as `rec.adapter {ok:false}` and do not affect other capture.
 
 Shipped: `pf2e` (checks, actions, turns, rerolls, damage, conditions, sheet strike/spell enrichment),

@@ -2,8 +2,6 @@
   "FFR": {
     "Settings": {
       "enabled": { "name": "Enable flight recorder", "hint": "Master switch (GM). Nothing is recorded unless a session is started AND each participant opts in." },
-      "endpoint": { "name": "Collector ingest URL", "hint": "Leave empty to store recordings on the Foundry server (Data/modules/foundry-flight-recorder/storage). Players with the Upload Files permission write their own and record even without a GM; the others go through the connected GM. Optional self-hosted collector: e.g. https://foundry.example.org/ffr/v1/ingest (HTTPS if Foundry is HTTPS)." },
-      "ingestKey": { "name": "Collector ingest key", "hint": "Collector only. Append-only key, visible to every connected browser. It cannot read, export or delete data." },
       "mode": { "name": "Collection mode", "hint": "normal: low overhead. detailed: generic clicks, focus, warnings, layer changes. diagnostic: everything (also auto-enabled for 60 s after an error, freeze or friction marker)." },
       "includeNames": { "name": "Record entity names", "hint": "Include actor/item/scene/window names (helps analysis). Off: ids and types only." },
       "captureConsole": { "name": "Capture console errors/warnings", "hint": "Records console.error/warn messages and their origin module." },
@@ -21,7 +19,7 @@
       "recTip": "This session is recorded from your client. Click for options / report friction.", "optoutTip": "A session is being recorded, but not from your client.", "idleTip": "Flight recorder idle." },
     "Menu": { "title": "Flight recorder", "friction": "Report friction", "optout": "Stop recording me", "optin": "Record my client", "start": "Start session", "stop": "Stop session", "close": "Close",
       "session": "Session", "none": "none", "client": "Client state: {state}, mode {mode}, queued {queue}, sent {sent}, dropped {dropped}",
-      "collector": "Storage", "notContacted": "not contacted yet", "ok": "OK", "failing": "failing (HTTP {status}), retry in {s} s" },
+      "storage": "Storage", "notContacted": "nothing sent yet", "ok": "OK", "failing": "failing ({status}), retry in {s} s", "noRelay": "no GM online or network" },
     "Start": { "title": "Start session recording", "label": "Session label (optional)" }
   }
 }

@@ -1,9 +1,10 @@
-// SQLite storage shared by the collector (writer) and the analysis CLI (reader/admin).
+// SQLite database of the analysis CLI: built from the batch files the module stores on the Foundry server
+// (importStorage), then read by the analysis and administered by `ffr`.
 // Uses Node's built-in node:sqlite (Node >= 22.13), no native dependency.
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import { categoryOf, sanitize } from "../schema/schema.mjs";
+import { categoryOf, sanitize, validateBatch } from "../schema/schema.mjs";
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -50,7 +51,7 @@ export function openDb(file, { readonly = false } = {}) {
   return db;
 }
 
-/** Write side. One instance per collector process. */
+/** Write side, used by importStorage and the synthetic fixtures. */
 export class Store {
   constructor(db) {
     this.db = db;
@@ -127,16 +128,37 @@ export class Store {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Admin operations (CLI only; never reachable from the ingest endpoint).
-
-/** Mark sessions with no traffic for `idleMs` as ended. Returns ids. */
-export function finalizeIdle(db, idleMs, now = Date.now()) {
-  const rows = db.prepare("SELECT id FROM sessions WHERE status = 'active' AND last_recv < ?").all(now - idleMs);
-  const upd = db.prepare("UPDATE sessions SET status = 'ended', ended_at = last_t, end_reason = 'idle' WHERE id = ?");
-  for (const r of rows) upd.run(r.id);
-  return rows.map((r) => r.id);
+/**
+ * Load batch files (one JSON envelope per file, <world>/<session>/<participant>/<client>-<seq>.json) from
+ * directories or files. Idempotent: events dedup by id. A file's mtime is the Foundry server's write time
+ * and stands in for a receive time (clock skew), so copy with mtimes preserved (rsync -a, cp -p).
+ * Refused: invalid batches, a participant that does not match its folder, a client id already owned by
+ * another participant; events whose id does not belong to the batch's client are dropped.
+ */
+export function importStorage(db, paths) {
+  const files = paths.flatMap((a) => (fs.statSync(a).isDirectory() ? fs.readdirSync(a, { recursive: true }).map((f) => path.join(a, f)) : [a]))
+    .filter((f) => f.endsWith(".json") && fs.statSync(f).isFile())
+    .map((f) => ({ f, mtime: fs.statSync(f).mtimeMs })).sort((a, b) => a.mtime - b.mtime);
+  const store = new Store(db);
+  const owner = db.prepare("SELECT user FROM clients WHERE session_id = ? AND client_id = ?");
+  const r = { files: files.length, accepted: 0, duplicates: 0, rejectedEvents: 0, invalidFiles: [] };
+  for (const { f, mtime } of files) {
+    let v;
+    try { const body = JSON.parse(fs.readFileSync(f, "utf8")); delete body.key; v = validateBatch(body); } catch (e) { v = { ok: false, errors: [e.message] }; }
+    if (v.ok && path.basename(path.dirname(f)) !== v.batch.user) v = { ok: false, errors: [`user ${v.batch.user} is not this participant's folder`] };
+    const o = v.ok && owner.get(v.batch.sessionId, v.batch.clientId);
+    if (o && o.user !== v.batch.user) v = { ok: false, errors: [`client ${v.batch.clientId} belongs to another participant`] };
+    if (!v.ok) { r.invalidFiles.push(`${f}: ${String(v.errors[0]).slice(0, 120)}`); continue; }
+    const foreign = v.batch.events.filter((e) => e.id !== `${v.batch.clientId}.${e.seq}`);
+    v.batch.events = v.batch.events.filter((e) => !foreign.includes(e));
+    const x = store.ingest(v.batch, { recv: mtime, rejected: v.rejected.length + foreign.length });
+    r.accepted += x.accepted; r.duplicates += x.duplicates; r.rejectedEvents += v.rejected.length + foreign.length;
+  }
+  return r;
 }
+
+// ---------------------------------------------------------------------------
+// Admin operations (CLI only).
 
 export function finalizeSession(db, id, reason = "admin") {
   return db.prepare("UPDATE sessions SET status = 'ended', ended_at = COALESCE(last_t, ?), end_reason = ? WHERE id = ? AND status = 'active'")

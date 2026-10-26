@@ -1,7 +1,7 @@
 // Analysis of roll origins, libWrapper conflicts and latency on a hand-built session.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openDb, Store } from "../packages/collector/db.mjs";
+import { openDb, Store } from "../packages/analysis-cli/db.mjs";
 import * as A from "../packages/analysis-cli/analyze.mjs";
 
 const T = 1_750_000_000_000;

@@ -4,15 +4,16 @@
 |---|---|
 | Badge shows `○ rec off` | GM has not enabled the recorder or started a session. |
 | Badge `○ REC (not you)` | This client's participation is *No* (or the consent dialog was dismissed): badge → *Record my client*. |
-| Badge menu: "Collector: failing (HTTP 0)" | Network/CORS/mixed content. Open devtools Network tab: blocked = mixed content (use HTTPS endpoint); CORS error = origin not in `FFR_ALLOWED_ORIGINS` (must match scheme+host+port exactly). |
-| HTTP 401 | Ingest key in module settings ≠ `FFR_INGEST_KEY`. Batches refused with 4xx are dropped (no retry loop): fix and new events flow. |
-| HTTP 400 | Schema mismatch (module and collector versions differ). Rebuild both from the same commit. |
-| HTTP 429 | Rate limits; raise `FFR_RATE_RPS`/`FFR_RATE_EPM` for big tables or diagnostic mode. Client retries with backoff. |
-| HTTP 507 | `FFR_MAX_DB_MB` reached: export/delete old sessions or raise the cap. |
+| Badge menu: "Storage: failing (no GM online or network)" | The player has no *Upload Files* permission and no GM is connected: batches wait in memory and are written when a GM joins. Or the network to Foundry is down. |
+| Badge menu: "Storage: failing (403)" | The user lost *Upload Files* mid-session; batches refused with 4xx are dropped (no retry loop). |
+| Badge menu: "Storage: failing (500)" | Foundry refused the upload (disk full, `Data/flight-recorder` not writable): check the Foundry server log. |
+| No files in `Data/flight-recorder/` | Recorder not enabled, no session started, or nobody consented. Each participant has a folder per session. |
 | Module not listed in Foundry | Restart Foundry after copying into `Data/modules`. |
-| `ffr: database not found` | Pass `--db` or `FFR_DB` (after `ffr import` when no collector is used). |
-| Session still `active` | GM closed the tab without *Stop session*: `ffr finalize <s>` or wait `FFR_SESSION_IDLE_MIN`. |
-| `rec.loss` events / `seqMissing` | Client queue overflowed (collector unreachable > ~a few minutes at high event rates) or rate-limited types; see `ffr info`. |
+| `ffr: database not found` | Run `ffr import <copy of Data/flight-recorder>` first, or pass `--db` / `FFR_DB`. |
+| `ffr import` lists `invalidFiles` | Files edited by hand, a participant/folder mismatch or a reused client id: refused on purpose (see privacy.md). |
+| Clock skew looks wrong after import | The copy lost file modification times: copy with `rsync -a` or `cp -p`. |
+| Session still `active` | GM closed the tab without *Stop session*: `ffr finalize <s>`. |
+| `rec.loss` events / `seqMissing` | Client queue overflowed (storage unreachable for several minutes at high event rates) or rate-limited types; see `ffr info`. |
 | No `perf.loaf` / `longTasks` | Browser lacks Long Animation Frames (Firefox/Safari); frame times are still measured. |
 | ExperimentalWarning about SQLite | Harmless (`node:sqlite`); npm scripts suppress it. |
-| Console shows errors from `foundry-flight-recorder` | Should not happen: handlers are wrapped. `api.status().selfErrors` counts swallowed internal errors; please report with the session id. |
+| Console shows errors from `foundry-flight-recorder` | Should not happen: handlers are wrapped. `api.status().selfErrors` counts swallowed internal errors; please report with the session id. Our hook wrappers do appear in the stacks of other modules' hook errors (and in libWrapper's `[Detected packages]` note): that is not our error. |

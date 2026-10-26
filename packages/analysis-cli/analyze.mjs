@@ -1,4 +1,4 @@
-// Deterministic analysis over the collector database. Every function returns plain JSON whose
+// Deterministic analysis over the imported database. Every function returns plain JSON whose
 // findings cite event ids, so conclusions can be grounded (see AGENTS.md).
 // Wording rule: describe observable behaviour ("closed the dialog without rolling"), never states of
 // mind ("was confused"). Interpretation belongs to the investigator, with alternatives.
@@ -140,7 +140,7 @@ export function info(db, sid) {
   if (!clients.some((c) => c.role === "gm")) limitations.push("No GM client recorded: combat turns, others' chat messages and connection events (recorded by the active GM only) are missing.");
   for (const c of perClient) {
     if (c.seqMissing) limitations.push(`Client ${c.client} (${c.user}) has ${c.seqMissing} events missing from its sequence (lost in transit or dropped).`);
-    if (c.droppedReported) limitations.push(`Client ${c.client} reported ${c.droppedReported} events dropped from its local queue (collector unreachable or overload).`);
+    if (c.droppedReported) limitations.push(`Client ${c.client} reported ${c.droppedReported} events dropped from its local queue (storage unreachable, e.g. no GM online, or overload).`);
     if (Object.keys(c.sampledOut).length) limitations.push(`Client ${c.client} rate-limited some event types: ${JSON.stringify(c.sampledOut)}.`);
     if (!c.cleanUnload && s.status === "ended") limitations.push(`Client ${c.client} (${c.user}) stopped sending without unload/stop event at ${c.to} (crash, network loss, or closed tab).`);
     if (!c.env) limitations.push(`Client ${c.client} has no env.snapshot (joined before recorder activation or event lost).`);
