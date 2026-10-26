@@ -11,7 +11,26 @@ import { rollData } from "../capture.mjs";
 export default {
   id: "pf2e",
   detect: () => game.system?.id === "pf2e",
-  install({ rec, on }) {
+  install({ rec, on, enrich }) {
+    // Sheet clicks (verified in PF2e 8.6.1 templates): strikes are li[data-action-index] -> actor.system.actions[i],
+    // buttons carry data-variant-index (0/1/2 = multiple attack penalty step); spells carry data-entry-id,
+    // data-group-id (rank or "cantrips"), data-slot-id; "toggle-summary" expands an item's rules text.
+    enrich((el, app, data) => {
+      const actor = app?.actor ?? app?.document;
+      if (el.dataset.variantIndex !== undefined) data.variant = Number(el.dataset.variantIndex);
+      const strikeEl = el.closest("[data-action-index]");
+      if (strikeEl && actor?.system?.actions) {
+        const strike = actor.system.actions[Number(strikeEl.dataset.actionIndex)];
+        if (strike) { data.strike = strike.slug ?? null; if (!data.item && strike.item) data.item = ref(strike.item); }
+      }
+      const spellEl = el.closest("[data-entry-id], [data-group-id]");
+      if (spellEl) {
+        if (spellEl.dataset.groupId !== undefined) data.spellGroup = spellEl.dataset.groupId;
+        if (spellEl.dataset.slotId !== undefined) data.slot = Number(spellEl.dataset.slotId);
+      }
+      if (data.action === "toggle-summary") data.readsRules = true;
+    });
+
     on("createChatMessage", (msg, options, userId) => {
       const local = isSelf(userId);
       if (!local && !isActiveGM()) return;

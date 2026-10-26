@@ -167,7 +167,8 @@ async function session(store, { id, t0, variant }) {
       if (variant === "A" && round === 1) {
         const sh = p2.openApp("CharacterSheetPF2e", EZREN);
         for (let i = 0; i < 3; i++) { w.at(t + 5 + i * 6); p2.e("ui.tab", { tab: "spellcasting", group: "primary", cls: "CharacterSheetPF2e" }); }
-        w.at(t + 25); p2.e("ui.action", { action: "item-summary", cls: "CharacterSheetPF2e", item: ARC });
+        w.at(t + 25); p2.e("ui.action", { action: "toggle-summary", cls: "CharacterSheetPF2e", item: ARC, readsRules: true, spellGroup: "cantrips" });
+        w.at(t + 33); p2.e("ui.action", { action: "toggle-summary", cls: "CharacterSheetPF2e", item: ARC, readsRules: true, spellGroup: "cantrips" });
         w.at(t + 40); const dlg = p2.openApp("CheckModifiersDialog", null);
         w.at(t + 48); p2.close(dlg);
         truth.abandonedDialog = dlg.id;
@@ -200,6 +201,9 @@ async function session(store, { id, t0, variant }) {
         w.at(t + 150); check(p3b, { ctype: "attack-roll", outcome: "critical-success", statistic: "attack", actor: VALEROS, item: { name: "Longsword", type: "weapon" }, target: { actor: true, token: true }, roll: { total: 27 } }, `m${round}d`);
       } else {
         const c = w.clients.filter((x) => x.user === "u_valeros" && x.alive).at(-1);
+        const SWORD = { uuid: "Actor.valeros.Item.sword", doc: "Item", type: "weapon", name: "Longsword", slug: "longsword" };
+        w.at(t + 10); c.e("ui.action", { action: "strike-attack", cls: "CharacterSheetPF2e", item: SWORD, strike: "longsword", variant: 0 });
+        w.at(t + 25); c.e("ui.action", { action: "strike-attack", cls: "CharacterSheetPF2e", item: SWORD, strike: "longsword", variant: 1 });
         w.at(t + 15); check(c, { ctype: "attack-roll", outcome: "success", statistic: "attack", actor: VALEROS, item: { name: "Longsword", type: "weapon" }, target: { actor: true, token: true }, roll: { total: 22 } }, `m${round}d`);
       }
     });

@@ -149,3 +149,19 @@ test("read-only CLI cannot modify data; sql refuses writes", () => {
   assert.throws(() => cli("sql", "DELETE FROM events"));
   assert.throws(() => execFileSync(process.execPath, ["packages/analysis-cli/ffr.mjs", "delete", "synA", "--db", file], { stdio: "pipe" }), /--yes/);
 });
+
+test("trend: rows oldest first, config change flagged, error persistence per session", () => {
+  const t = cli("trend");
+  assert.deepEqual(t.sessions.map((r) => r.session), [A1, B1]);
+  assert.equal(t.sessions[1].configChanged, true);
+  assert.equal(t.sessions[0].telemetryComplete, false);
+  assert.ok(t.sessions[0].frictions === 1 && t.sessions[1].frictions === 0);
+  assert.deepEqual(t.errorTrend.find((e) => e.fingerprint.startsWith("pf2e-toolbelt")).counts, [1, 0]);
+});
+
+test("pf2e: rules-text lookups per item and strike MAP variants from enriched sheet actions", () => {
+  const p = cli("pf2e", "synA");
+  assert.equal(p.rulesLookups["Electric Arc"].n, 2);
+  assert.deepEqual(p.rulesLookups["Electric Arc"].users, ["u_ezren"]);
+  assert.ok(p.strikeVariantsMAP.Longsword[0] >= 1 && p.strikeVariantsMAP.Longsword[1] >= 1);
+});

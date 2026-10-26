@@ -31,6 +31,7 @@ Work through these in order. Each step ends on its completion criterion.
    folder, or the module's repo), read the code around the stack frame.
 6. **Compare** when a previous session exists: `ffr compare <old> <new>`. Config changes are listed
    (modules added/removed/upgraded, settings changed); treat them as candidate causes of the deltas.
+   With three or more sessions, `ffr trend` shows each metric per session and which errors recur.
 7. **Write the report** following [`docs/report-template.md`](docs/report-template.md). Done when every
    finding carries all six parts listed there and every recommendation maps to a finding.
 

@@ -1,7 +1,8 @@
-// Adapter registry. An adapter is { id, detect(): boolean, install({rec, on}) }.
+// Adapter registry. An adapter is { id, detect(): boolean, install({rec, on, enrich}) }.
 // A failing detect/install is reported (rec.adapter) and isolated; it never stops the recorder.
 // To add one: write adapters/<id>.mjs exporting that shape and list it below (see docs/adapters.md).
 import pf2e from "./pf2e.mjs";
+import { actionEnrichers } from "../capture.mjs";
 
 const diceSoNice = {
   id: "dice-so-nice",
@@ -22,7 +23,7 @@ export function installAdapters(rec, safe) {
   for (const a of ADAPTERS) {
     try {
       if (!a.detect()) continue;
-      a.install({ rec, on });
+      a.install({ rec, on, enrich: (fn) => actionEnrichers.push(fn) });
       report.push({ id: a.id, ok: true });
     } catch (err) {
       report.push({ id: a.id, ok: false, error: String(err?.message ?? err).slice(0, 200) });

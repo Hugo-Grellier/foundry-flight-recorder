@@ -4,7 +4,7 @@ Date: 2026-10-22. Host: Ryzen 7 7840HS, 16 threads, Linux, Node 22.23.4.
 
 ## 1. Automated tests (`npm test`) — synthetic / mocked
 
-47 tests, all passing (`node:test`):
+54 tests, all passing (`node:test`) as of 2026-10-26 (47 at the real-runtime validation of 2026-10-22):
 
 | Suite | Covers |
 |---|---|
@@ -83,6 +83,10 @@ note as untrusted text, and refused causal claims from the session comparison. E
 refer to the dataset generated at that time (ids are random per generation).
 
 ## Not validated
+
+- Added after the last real-runtime run (2026-10-26, lab frozen by its owner): French/English localization,
+  PF2e sheet enrichment (strike MAP variant, spell rank/slot, rules-text lookups), `ffr trend`,
+  `tools/maxi-runner.mjs`. Covered by unit/synthetic tests only; to re-run `npm run e2e` when the lab is free.
 
 - A real session with human players (behaviour, consent UX, multi-hour stability, real network loss).
 - Firefox/Safari clients (no LoAF/long tasks/memory; DOM capture unverified).

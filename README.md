@@ -27,7 +27,7 @@ npm run build               # dist/foundry-flight-recorder(.zip)
 node scripts/build-module.mjs --install /path/to/FoundryData/Data/modules   # then restart Foundry
 ```
 
-In the world: enable *Flight Recorder* → *Configure Settings*: **Enable**, **Collector ingest URL**
+UI in English and French (follows the Foundry language). In the world: enable *Flight Recorder* → *Configure Settings*: **Enable**, **Collector ingest URL**
 (`http://<host>:4318/v1/ingest`, HTTPS behind a proxy if Foundry is HTTPS), **ingest key**.
 
 Record: GM clicks the badge at the top of the screen → *Start session*. Players accept the consent dialog.

@@ -14,6 +14,14 @@
   fixed (docs/validation.md §3). Final runs 37/37. World restored after every run (module disabled, test scene removed).
 - Codex CLI investigated the synthetic dataset via AGENTS.md: examples/report-synthetic-session.md.
 
+## 2026-10-26 — session 3 (lab frozen by the lab lead: no runtime tests)
+- Runner integration for foundry-maxi-lab (`tools/maxi-runner.mjs`, MAXI_FFR=1 patch sent to the lab lead).
+- EN/FR localization of every module string (lang files + key-coverage test).
+- PF2e sheet enrichment via adapter `enrich()`: strike + MAP variant, spell rank/slot, rules-text lookups;
+  surfaced in `ffr pf2e` (`rulesLookups`, `strikeVariantsMAP`).
+- `ffr trend`: per-session metrics over time, config-change flag, recurring error fingerprints.
+- Pending: real-runtime verification of the above (`npm run e2e`) once the lab lead releases the lab.
+
 ## Decisions
 See docs/architecture.md (ADR log).
 

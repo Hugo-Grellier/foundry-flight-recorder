@@ -29,6 +29,7 @@ Investigation (read-only):
   usage <s>                     per-user interaction counts, top windows/tabs
   gaps <s>                      missing telemetry (sequence gaps) per client
   compare <a> <b>               config diff + perf/errors/turns/friction deltas
+  trend [--last 10] [--world w] metrics per session over time + recurring errors
   export <s> [--out dir]        events.jsonl (time-ordered) + session.json
   sql "<select ...>"            read-only SQL (tables: sessions, clients, batches, events)
 
@@ -47,7 +48,7 @@ const { values: o, positionals: pos } = parseArgs({
     client: { type: "string" }, user: { type: "string" }, from: { type: "string" }, to: { type: "string" }, type: { type: "string" },
     cat: { type: "string" }, sev: { type: "string" }, limit: { type: "string" }, event: { type: "string" }, time: { type: "string" },
     before: { type: "string" }, after: { type: "string" }, module: { type: "string" }, grep: { type: "string" }, round: { type: "string" },
-    scene: { type: "string" }, days: { type: "string" }, perf: { type: "boolean" },
+    scene: { type: "string" }, days: { type: "string" }, perf: { type: "boolean" }, last: { type: "string" }, world: { type: "string" },
   },
 });
 
@@ -117,6 +118,7 @@ try {
     case "friction": print(A.friction(db, sess(args[0]), { before: A.parseDuration(o.before, 30000) })); break;
     case "pf2e": print(A.pf2eSummary(db, sess(args[0]))); break;
     case "usage": print(A.usage(db, sess(args[0]))); break;
+    case "trend": print(A.trend(db, { last: Number(o.last ?? 10), world: o.world })); break;
     case "compare": if (args.length < 2) fail("compare needs two sessions"); print(A.compare(db, sess(args[0]), sess(args[1]))); break;
     case "export": {
       const s = sess(args[0]);

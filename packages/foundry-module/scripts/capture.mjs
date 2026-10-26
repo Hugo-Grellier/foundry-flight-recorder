@@ -5,6 +5,9 @@ import { ref, appFor, appName, appRef, changedPaths, isActiveGM, isSelf, userRef
 
 const IDLE_MS = 90000;
 
+// Adapters push (el, app, data) => void functions here to add system semantics to ui.action events.
+export const actionEnrichers = [];
+
 export function installCapture(rec, opts) {
   const safe = (fn) => function (...args) { try { fn.apply(this, args); } catch { rec.counters.selfErrors++; } };
   const on = (hook, fn) => Hooks.on(hook, safe(fn));
@@ -142,6 +145,7 @@ function installUi(rec, safe, on) {
       if (item) data.item = ref(item);
       if (act.dataset.slug) data.slug = act.dataset.slug;
       if (act.dataset.statistic) data.statistic = act.dataset.statistic;
+      for (const f of actionEnrichers) { try { f(act, app, data); } catch { rec.counters.selfErrors++; } }
       rec.emit("ui.action", data, { local: true });
       return;
     }

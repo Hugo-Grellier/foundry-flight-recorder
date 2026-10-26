@@ -484,7 +484,23 @@ export function pf2eSummary(db, sid) {
   const rerolls = events(db, sid, { types: ["pf2e.reroll"], limit: 10000 }).map((e) => ({ id: e.id, user: e.user, resource: e.data?.resource, old: e.data?.old, new: e.data?.new }));
   const actions = {};
   for (const e of dedup(events(db, sid, { types: ["pf2e.action"], limit: 100000 }))) { const s = e.data?.item?.name ?? e.data?.item?.slug ?? "?"; actions[s] = (actions[s] ?? 0) + 1; }
-  return { checksByType: byType, checksByStatistic: byStat, conditionsApplied: conditions, rerolls, actionsUsed: actions, attacksWithoutTarget: checks.filter((c) => /attack/.test(c.data?.ctype ?? "") && c.data?.target === null).map((c) => c.id) };
+  // sheet interactions enriched by the PF2e adapter
+  const rulesLookups = {}, strikeVariants = {};
+  for (const e of events(db, sid, { types: ["ui.action"], limit: 1_000_000 })) {
+    const d = e.data ?? {};
+    if (d.readsRules) {
+      const k = `${d.item?.name ?? d.item?.slug ?? "?"}`;
+      const r = (rulesLookups[k] ??= { n: 0, users: [], ids: [] });
+      r.n++; if (!r.users.includes(e.user)) r.users.push(e.user); if (r.ids.length < 8) r.ids.push(e.id);
+    }
+    if (d.action === "strike-attack" && d.variant !== undefined) {
+      const k = `${d.item?.name ?? d.strike ?? "?"}`;
+      (strikeVariants[k] ??= [0, 0, 0])[Math.min(2, d.variant)]++;
+    }
+  }
+  return { checksByType: byType, checksByStatistic: byStat, conditionsApplied: conditions, rerolls, actionsUsed: actions,
+    rulesLookups: Object.fromEntries(Object.entries(rulesLookups).sort((a, b) => b[1].n - a[1].n).slice(0, 20)),
+    strikeVariantsMAP: strikeVariants, attacksWithoutTarget: checks.filter((c) => /attack/.test(c.data?.ctype ?? "") && c.data?.target === null).map((c) => c.id) };
 }
 
 export function usage(db, sid) {
@@ -581,5 +597,39 @@ export function digest(db, sid) {
     frictions: friction(db, sid).map(({ lastInteractions, ...f }) => f),
     patterns: repeats(db, sid).slice(0, 40),
     pf2e: pf2eSummary(db, sid), usage: usage(db, sid),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Multi-session trend: one row per session (oldest first) + error fingerprints across sessions.
+
+export function trend(db, { last = 10, world } = {}) {
+  const sessions = listSessions(db).filter((s) => !world || s.world === world).slice(0, last).reverse();
+  const rows = [], errorsBySession = new Map();
+  for (const s of sessions) {
+    const inf = info(db, s.id);
+    const t = turns(db, s.id).stats;
+    const p = perf(db, s.id);
+    const reps = repeats(db, s.id);
+    const errs = errors(db, s.id).filter((g) => g.type.startsWith("err"));
+    errorsBySession.set(s.id, new Map(errs.map((g) => [g.fingerprint, g.count])));
+    const fps = p.byClientScene.map((g) => g.fpsMedian).filter((x) => x != null);
+    rows.push({
+      session: s.id, label: s.label, start: s.start, durationMin: s.durationMin, users: inf.users,
+      telemetryComplete: inf.clients.every((c) => !c.seqMissing && !c.droppedReported),
+      errors: errs.reduce((a, g) => a + g.count, 0), errorKinds: errs.length,
+      frictions: friction(db, s.id).length, patterns: reps.length,
+      turnMedianS: t.medianS, turnP90S: t.p90S, stalls: p.stalls.length, worstClientFps: fps.length ? Math.min(...fps) : null,
+      fp: inf.clients.find((c) => c.role === "gm")?.env?.fp?.all ?? inf.clients[0]?.env?.fp?.all ?? null,
+    });
+  }
+  // configuration changed between consecutive sessions?
+  for (let i = 1; i < rows.length; i++) rows[i].configChanged = rows[i].fp !== rows[i - 1].fp;
+  const allFp = new Set([...errorsBySession.values()].flatMap((m) => [...m.keys()]));
+  const errorTrend = [...allFp].map((fp) => ({ fingerprint: fp, counts: sessions.map((s) => errorsBySession.get(s.id).get(fp) ?? 0) }))
+    .sort((a, b) => b.counts.filter(Boolean).length - a.counts.filter(Boolean).length);
+  return {
+    sessions: rows, errorTrend: errorTrend.slice(0, 30),
+    caveat: "Sessions differ in scenes, players and encounters; read trends as hypotheses to test, not as proof that a change worked. Use `compare` on a pair for the config diff.",
   };
 }

@@ -10,20 +10,22 @@ const MOD = "foundry-flight-recorder";
 const get = (k) => game.settings.get(MOD, k);
 let rec, perfSupports = {}, adapters = [], applying = Promise.resolve(), badge = null, askedFor = null;
 
-const FRICTION = { confusing: "Confusing", difficult: "Hard to do", broken: "Broken / bug", slow: "Slow / laggy", rules: "Unsure about a rule", other: "Other" };
+const FRICTION = ["confusing", "difficult", "broken", "slow", "rules", "other"];
+const L = (k, data) => (data ? game.i18n.format(`FFR.${k}`, data) : game.i18n.localize(`FFR.${k}`));
+const S = (k) => ({ name: `FFR.Settings.${k}.name`, hint: `FFR.Settings.${k}.hint` }); // Foundry localizes these keys
 
 function registerSettings() {
   const reg = (k, o) => game.settings.register(MOD, k, { onChange: () => schedule(), ...o });
-  reg("enabled", { name: "Enable flight recorder", hint: "Master switch (GM). Nothing is recorded unless a session is started AND each participant opts in.", scope: "world", config: true, type: Boolean, default: false });
-  reg("endpoint", { name: "Collector ingest URL", hint: "e.g. https://foundry.example.org/ffr/v1/ingest . Must be HTTPS if Foundry is served over HTTPS.", scope: "world", config: true, type: String, default: "http://127.0.0.1:4318/v1/ingest" });
-  reg("ingestKey", { name: "Collector ingest key", hint: "Append-only key, visible to every connected browser. It cannot read, export or delete data.", scope: "world", config: true, type: String, default: "" });
-  reg("mode", { name: "Collection mode", hint: "normal: low overhead. detailed: generic clicks, focus, warnings, layer changes. diagnostic: everything (also auto-enabled for 60 s after an error, freeze or friction marker).", scope: "world", config: true, type: String, choices: { normal: "Normal", detailed: "Detailed", diagnostic: "Diagnostic" }, default: "normal" });
-  reg("includeNames", { name: "Record entity names", hint: "Include actor/item/scene/window names (helps analysis). Off: ids and types only.", scope: "world", config: true, type: Boolean, default: true });
-  reg("captureConsole", { name: "Capture console errors/warnings", hint: "Records console.error/warn messages and their origin module.", scope: "world", config: true, type: Boolean, default: true });
+  reg("enabled", { ...S("enabled"), scope: "world", config: true, type: Boolean, default: false });
+  reg("endpoint", { ...S("endpoint"), scope: "world", config: true, type: String, default: "http://127.0.0.1:4318/v1/ingest" });
+  reg("ingestKey", { ...S("ingestKey"), scope: "world", config: true, type: String, default: "" });
+  reg("mode", { ...S("mode"), scope: "world", config: true, type: String, choices: { normal: "FFR.Mode.normal", detailed: "FFR.Mode.detailed", diagnostic: "FFR.Mode.diagnostic" }, default: "normal" });
+  reg("includeNames", { ...S("includeNames"), scope: "world", config: true, type: Boolean, default: true });
+  reg("captureConsole", { ...S("captureConsole"), scope: "world", config: true, type: Boolean, default: true });
   reg("session", { scope: "world", config: false, type: Object, default: null });
-  reg("participation", { name: "My participation in session recording", hint: "Ask: prompt when a recording starts. Yes/No: your choice for this world. You can change it at any time.", scope: "client", config: true, type: String, choices: { ask: "Ask me", yes: "Yes, record my client", no: "No, never record my client" }, default: "ask" });
+  reg("participation", { ...S("participation"), scope: "client", config: true, type: String, choices: { ask: "FFR.Participation.ask", yes: "FFR.Participation.yes", no: "FFR.Participation.no" }, default: "ask" });
   game.keybindings.register(MOD, "friction", {
-    name: "Flight recorder: report friction", hint: "Mark the current moment as confusing, difficult or broken.",
+    name: "FFR.Key.friction", hint: "FFR.Key.frictionHint",
     editable: [{ key: "KeyF", modifiers: ["Alt", "Shift"] }], onDown: () => { openFriction(); return true; },
   });
 }
@@ -59,21 +61,17 @@ async function apply() {
     emitEnvironment(rec, { mode: get("mode"), perfSupports, adapters });
     if (canvas?.scene) emitSceneSummary(rec, canvas.scene);
     rec.restore().catch(() => {});
-    ui.notifications.info("Flight recorder: this session is being recorded (your client opted in). Alt+Shift+F reports friction.");
+    ui.notifications.info(L("Started"));
   }
   renderBadge();
 }
 
 async function askConsent(session) {
   const { DialogV2 } = foundry.applications.api;
-  const content = `<p>The GM started a <b>session recording</b>${session.label ? ` (“${foundry.utils.escapeHTML(session.label)}”)` : ""} to improve future sessions.</p>
-    <p>If you agree, your client sends to the GM's server: windows/tabs opened, buttons used, targets, token moves, rolls and their results,
-    errors and performance measurements. <b>Never</b> chat text, typed text, passwords, journals, audio or screenshots.
-    You are identified by a pseudonym. Data is used to improve the game, not to rate players.</p>
-    <p>You can change this later in <i>Configure Settings → Flight Recorder</i> or with the REC badge.</p>`;
+  const content = L("Consent.body", { label: session.label ? ` (“${foundry.utils.escapeHTML(session.label)}”)` : "" });
   const r = await DialogV2.wait({
-    window: { title: "Session recording" }, content, rejectClose: false,
-    buttons: [{ action: "yes", label: "Record my client", default: true }, { action: "no", label: "Do not record me" }],
+    window: { title: L("Consent.title") }, content, rejectClose: false,
+    buttons: [{ action: "yes", label: L("Consent.yes"), default: true }, { action: "no", label: L("Consent.no") }],
   });
   return r === "yes" ? "yes" : r === "no" ? "no" : null;
 }
@@ -91,8 +89,8 @@ function renderBadge() {
   const session = get("session"), enabled = get("enabled");
   const s = rec.state === "active" ? "rec" : enabled && session?.id ? "optout" : "idle";
   badge.dataset.state = s;
-  badge.textContent = s === "rec" ? `● REC${rec.effectiveMode() !== "normal" ? ` (${rec.effectiveMode()})` : ""}` : s === "optout" ? "○ REC (not you)" : "○ rec off";
-  badge.title = s === "rec" ? "This session is recorded from your client. Click for options / report friction." : s === "optout" ? "A session is being recorded, but not from your client." : "Flight recorder idle.";
+  badge.textContent = L(`Badge.${s}`) + (s === "rec" && rec.effectiveMode() !== "normal" ? ` (${L(`Mode.${rec.effectiveMode()}`)})` : "");
+  badge.title = L(`Badge.${s}Tip`);
   badge.hidden = !enabled && !game.user.isGM;
 }
 
@@ -101,16 +99,17 @@ async function openMenu() {
   const session = get("session");
   const st = rec.status();
   const buttons = [];
-  if (st.state === "active") buttons.push({ action: "friction", label: "Report friction" });
-  buttons.push(get("participation") === "yes" ? { action: "optout", label: "Stop recording me" } : { action: "optin", label: "Record my client" });
-  if (game.user.isGM) buttons.push(session?.id ? { action: "stop", label: "Stop session" } : { action: "start", label: "Start session" });
-  buttons.push({ action: "close", label: "Close" });
+  const btn = (action) => ({ action, label: L(`Menu.${action}`) });
+  if (st.state === "active") buttons.push(btn("friction"));
+  buttons.push(btn(get("participation") === "yes" ? "optout" : "optin"));
+  if (game.user.isGM) buttons.push(btn(session?.id ? "stop" : "start"));
+  buttons.push(btn("close"));
   const lines = [
-    `Session: <b>${session?.id ?? "none"}</b>${session?.label ? ` — ${foundry.utils.escapeHTML(session.label)}` : ""}`,
-    `Client state: ${st.state}, mode ${st.effectiveMode}, queued ${st.queue}, sent ${st.sent}, dropped ${st.dropped}`,
-    `Collector: ${st.lastStatus.ok === null ? "not contacted yet" : st.lastStatus.ok ? "OK" : `failing (HTTP ${st.lastStatus.status || "network"}), retry in ${Math.round(st.backoffMs / 1000)} s`}`,
+    `${L("Menu.session")} : <b>${session?.id ?? L("Menu.none")}</b>${session?.label ? ` — ${foundry.utils.escapeHTML(session.label)}` : ""}`,
+    L("Menu.client", { state: st.state, mode: st.effectiveMode, queue: st.queue, sent: st.sent, dropped: st.dropped }),
+    `${L("Menu.collector")} : ${st.lastStatus.ok === null ? L("Menu.notContacted") : st.lastStatus.ok ? L("Menu.ok") : L("Menu.failing", { status: st.lastStatus.status || "network", s: Math.round(st.backoffMs / 1000) })}`,
   ];
-  const r = await DialogV2.wait({ window: { title: "Flight recorder" }, content: `<p>${lines.join("<br>")}</p>`, buttons, rejectClose: false });
+  const r = await DialogV2.wait({ window: { title: L("Menu.title") }, content: `<p>${lines.join("<br>")}</p>`, buttons, rejectClose: false });
   if (r === "friction") openFriction();
   else if (r === "optout") await game.settings.set(MOD, "participation", "no");
   else if (r === "optin") await game.settings.set(MOD, "participation", "yes");
@@ -119,28 +118,28 @@ async function openMenu() {
 }
 
 async function openFriction() {
-  if (rec.state !== "active") return ui.notifications.warn("Flight recorder is not recording your client.");
+  if (rec.state !== "active") return ui.notifications.warn(L("Friction.notRecording"));
   const t = Date.now();
   const recent = rec.recent(12);
   const { DialogV2 } = foundry.applications.api;
-  const opts = Object.entries(FRICTION).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+  const opts = FRICTION.map((k) => `<option value="${k}">${L(`Friction.${k}`)}</option>`).join("");
   const res = await DialogV2.prompt({
-    window: { title: "Report friction" },
-    content: `<div class="form-group"><label>What happened?</label><select name="cat">${opts}</select></div>
-      <div class="form-group"><label>Optional note (visible to the GM's analysis)</label><input type="text" name="note" maxlength="300"></div>`,
-    ok: { label: "Mark", callback: (ev, button) => ({ cat: button.form.elements.cat.value, note: button.form.elements.note.value }) },
+    window: { title: L("Friction.title") },
+    content: `<div class="form-group"><label>${L("Friction.what")}</label><select name="cat">${opts}</select></div>
+      <div class="form-group"><label>${L("Friction.note")}</label><input type="text" name="note" maxlength="300"></div>`,
+    ok: { label: L("Friction.mark"), callback: (ev, button) => ({ cat: button.form.elements.cat.value, note: button.form.elements.note.value }) },
     rejectClose: false,
   });
   if (!res) return;
   const openApps = [...(foundry.applications.instances?.values() ?? [])].map((a) => a.constructor.name).slice(0, 12);
   rec.emit("friction.mark", { cat: res.cat, note: String(res.note ?? "").slice(0, 300) || null, markedAt: t, dialogMs: Date.now() - t, recent, openApps }, { sev: "notice", local: true });
-  ui.notifications.info("Thanks, marked.");
+  ui.notifications.info(L("Friction.thanks"));
 }
 
 async function startSession(label) {
   if (!game.user.isGM) return;
   label ??= await foundry.applications.api.DialogV2.prompt({
-    window: { title: "Start session recording" }, content: `<input type="text" name="label" placeholder="Session label (optional)" maxlength="100">`,
+    window: { title: L("Start.title") }, content: `<input type="text" name="label" placeholder="${L("Start.label")}" maxlength="100">`,
     ok: { callback: (ev, button) => button.form.elements.label.value }, rejectClose: false,
   });
   if (label === null || label === undefined) return;

@@ -69,7 +69,7 @@ floods; counts are reported in `rec.loss.data.sampledOut`. Triggers are never sa
 | `ui.notify` | 0 (info: 1) | each | kind, msg (rendered notification text) |
 | `ui.app.open` / `ui.app.close` | 0 | each | span; cls, appId, doc ref, title |
 | `ui.tab` | 0 | each | tab, group, cls |
-| `ui.action` | 0 | each | `data-action`, cls, item ref, slug/statistic |
+| `ui.action` | 0 | each | `data-action`, cls, item ref, slug/statistic; PF2e adapter adds `strike`, `variant` (0/1/2 = MAP step), `spellGroup` (rank or "cantrips"), `slot`, `readsRules` (item rules text expanded) |
 | `ui.click` | 1 | each | generic fallback: tag, cls, classes, tooltip, docId |
 | `ui.focus` | 1 | each | field name, kind, cls (never the value; password fields skipped) |
 | `ui.sidebar` / `ui.layer` | 0 / 1 | each | tab / layer |
