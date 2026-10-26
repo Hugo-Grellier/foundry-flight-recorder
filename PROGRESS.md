@@ -27,7 +27,8 @@
 See docs/architecture.md (ADR log).
 
 ## Open issues / next
-1. One e2e run lost the GM's last events before the close()/fetch-timeout mitigation; root cause unconfirmed.
+1. One e2e run lost the GM's last events before the close()/fetch-timeout mitigation; most likely a hung fetch
+   + early-returning flush (both fixed and tested), not proven on the runtime.
 2. Validate with real players (consent UX, multi-hour stability, Firefox clients).
 3. Overhead measurement on a GPU-backed browser with repeated A/B runs.
 5. P2: per-sheet semantic maps (PF2e strike/spell buttons), statistical anomaly baselines, multi-session trends,

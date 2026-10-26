@@ -4,7 +4,7 @@ Date: 2026-10-22. Host: Ryzen 7 7840HS, 16 threads, Linux, Node 22.23.4.
 
 ## 1. Automated tests (`npm test`) — synthetic / mocked
 
-54 tests, all passing (`node:test`) as of 2026-10-26 (47 at the real-runtime validation of 2026-10-22):
+57 tests, all passing (`node:test`) as of 2026-10-26 (47 at the real-runtime validation of 2026-10-22):
 
 | Suite | Covers |
 |---|---|
@@ -54,7 +54,10 @@ Bugs found by the real runs and fixed (all covered by regression tests since):
 6. Errors attributed to a timer-wrapping module lower in the stack → throw site now separated.
 One earlier run lost the GM's final events without a confirmed root cause; the mitigation (`close()` persists
 undeliverable events for re-send, 15 s fetch timeout) passed the following runs, but the root cause is
-**not proven**.
+**not proven**. Most likely explanation, consistent with every observation of that run (no GM batch at all
+after +85 s, `api.stop()` returning instantly, queue dropped): one GM `fetch` never settled; the old
+`flush()` returned immediately while a send was in flight, so stop + `disable()` discarded the queue. Both
+halves are fixed and regression-tested (concurrent flush waits; hung send aborted after 15 s and retried).
 
 ### Overhead (real runtime, GM browser)
 
