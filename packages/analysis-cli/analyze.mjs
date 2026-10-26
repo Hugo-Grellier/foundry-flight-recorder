@@ -3,6 +3,10 @@
 // Wording rule: describe observable behaviour ("closed the dialog without rolling"), never states of
 // mind ("was confused"). Interpretation belongs to the investigator, with alternatives.
 
+// Aggregations keyed by telemetry strings (item names, module ids, scene names...) use null-prototype
+// objects: those strings are untrusted, and "__proto__" must stay an ordinary key.
+const dict = () => Object.create(null);
+
 export const ROLL_DIALOG_RE = /CheckModifiersDialog|DamageModifierDialog|RollDialog|CheckDialog/;
 
 // ---------------------------------------------------------------------------
@@ -127,7 +131,7 @@ export function info(db, sid) {
       from: firstEv ? fmtRel(firstEv.tc - t0) : null, to: lastEv ? fmtRel(lastEv.tc - t0) : null,
       endedWith: lastEv?.type ?? null,
       cleanUnload: !!db.prepare("SELECT 1 FROM events WHERE session_id = ? AND client_id = ? AND type IN ('client.unload','rec.stop','session.stop') LIMIT 1").get(sid, c.client_id),
-      sampledOut: loss.filter((l) => l.client_id === c.client_id).reduce((a, l) => { for (const [k, v] of Object.entries(l.data?.sampledOut ?? {})) a[k] = (a[k] ?? 0) + v; return a; }, {}),
+      sampledOut: loss.filter((l) => l.client_id === c.client_id).reduce((a, l) => { for (const [k, v] of Object.entries(l.data?.sampledOut ?? {})) a[k] = (a[k] ?? 0) + v; return a; }, dict()),
       env: env ? { foundry: env.foundry?.version, system: `${env.system?.id}@${env.system?.version}`, fp: env.fp, browser: env.browser?.brands?.join(", ") ?? env.browser?.ua, gpu: env.gpu?.renderer, cores: env.browser?.cores, memGb: env.browser?.memGb, perf: env.perfSupports, adapters: env.recorder?.adapters, mode: env.recorder?.mode } : null,
     };
   });
@@ -216,12 +220,12 @@ export function around(db, sid, { event, time, before = 30000, after = 10000, cl
   // perf.window rows are periodic noise in an evidence window: summarize them unless asked
   const pw = all.filter((e) => e.type === "perf.window");
   const rows = (includePerf ? all : all.filter((e) => e.type !== "perf.window")).slice(0, limit);
-  const perfSummary = {};
+  const perfSummary = dict();
   for (const e of pw) {
     const p = (perfSummary[e.client_id] ??= { user: e.user, windows: 0, minFps: Infinity, maxFrameMs: 0 });
     p.windows++; p.minFps = Math.min(p.minFps, e.data?.fps ?? Infinity); p.maxFrameMs = Math.max(p.maxFrameMs, e.data?.max ?? 0);
   }
-  const byClient = {};
+  const byClient = dict();
   for (const r of rows) byClient[r.client_id] = (byClient[r.client_id] ?? 0) + 1;
   // which clients were connected but silent in the window? (absence of evidence, not evidence of absence)
   const live = db.prepare("SELECT client_id, user, role FROM clients WHERE session_id = ? AND client_id IN (SELECT DISTINCT client_id FROM events WHERE session_id = ? AND tc < ?) AND client_id IN (SELECT DISTINCT client_id FROM events WHERE session_id = ? AND tc > ?)")
@@ -282,7 +286,7 @@ export function turns(db, sid, { round, combat } = {}) {
     const act = db.prepare(`SELECT type, user, COUNT(*) n FROM events WHERE session_id = ? AND tc >= ? AND tc < ?
       AND type IN ('ui.app.open','ui.action','ui.tab','token.target','token.move','pf2e.check','pf2e.action','chat.message','ui.notify','friction.mark','perf.stall','err.js','err.promise','err.foundry','err.console','pf2e.reroll')
       GROUP BY type, user`).all(sid, b.tc, t1);
-    const activity = {};
+    const activity = dict();
     for (const a of act) activity[a.type] = (activity[a.type] ?? 0) + a.n;
     // longest quiet gap inside the turn (no interaction from anyone)
     const ts = db.prepare("SELECT tc FROM events WHERE session_id = ? AND tc >= ? AND tc < ? AND cat IN ('ui','token','pf2e','chat') ORDER BY tc").all(sid, b.tc, t1).map((r) => r.tc);
@@ -313,7 +317,7 @@ export function perf(db, sid, { scene, client } = {}) {
     if (!e.data?.frames) continue; // hidden tab
     const k = `${e.scene ?? "-"}|${e.client_id}`;
     let g = groups.get(k);
-    if (!g) groups.set(k, (g = { scene: e.scene, sceneName: names[e.scene] ?? null, client: e.client_id, user: e.user, windows: 0, fps: [], p95: [], max: 0, maxId: null, longTaskMs: 0, loafMs: 0, origins: {}, heap: [] }));
+    if (!g) groups.set(k, (g = { scene: e.scene, sceneName: names[e.scene] ?? null, client: e.client_id, user: e.user, windows: 0, fps: [], p95: [], max: 0, maxId: null, longTaskMs: 0, loafMs: 0, origins: dict(), heap: [] }));
     g.windows++; g.fps.push(e.data.fps); g.p95.push(e.data.p95);
     if (e.data.max > g.max) { g.max = e.data.max; g.maxId = e.id; }
     g.longTaskMs += e.data.longTasks?.ms ?? 0; g.loafMs += e.data.loaf?.ms ?? 0;
@@ -338,7 +342,7 @@ export function perf(db, sid, { scene, client } = {}) {
 }
 
 export function sceneNames(db, sid) {
-  const out = {};
+  const out = dict();
   for (const e of events(db, sid, { types: ["scene.summary"], limit: 10000 })) if (e.scene) out[e.scene] = e.data?.name ?? out[e.scene] ?? null;
   return out;
 }
@@ -412,7 +416,7 @@ export function friction(db, sid, { before = 30000 } = {}) {
   const t0 = sessionT0(db, sid);
   return events(db, sid, { types: ["friction.mark"], limit: 10000 }).map((m) => {
     const ctx = events(db, sid, { client: m.client_id, from: m.tc - before, to: m.tc, limit: 200 }).filter((e) => e.id !== m.id);
-    const counts = {};
+    const counts = dict();
     for (const e of ctx) counts[e.type] = (counts[e.type] ?? 0) + 1;
     return {
       id: m.id, at: fmtRel(m.tc - t0), client: m.client_id, user: m.user, category: m.data?.cat, note: m.data?.note ?? null,
@@ -471,21 +475,21 @@ export function anomalies(db, sid) {
 
 export function pf2eSummary(db, sid) {
   const checks = dedup(events(db, sid, { types: ["pf2e.check"], limit: 1_000_000 }));
-  const byType = {}, byStat = {};
+  const byType = dict(), byStat = dict();
   for (const c of checks) {
     const d = c.data ?? {};
     const k = d.ctype ?? "?";
-    byType[k] ??= { n: 0, outcomes: {} };
+    byType[k] ??= { n: 0, outcomes: dict() };
     byType[k].n++; byType[k].outcomes[d.outcome ?? "none"] = (byType[k].outcomes[d.outcome ?? "none"] ?? 0) + 1;
     if (d.statistic) { byStat[d.statistic] ??= { n: 0, fail: 0 }; byStat[d.statistic].n++; if (/failure/.test(d.outcome ?? "")) byStat[d.statistic].fail++; }
   }
-  const conditions = {};
+  const conditions = dict();
   for (const e of events(db, sid, { types: ["pf2e.condition"], limit: 100000 })) if (e.data?.op === "create") { const s = e.data?.item?.slug ?? e.data?.item?.name ?? "?"; conditions[s] = (conditions[s] ?? 0) + 1; }
   const rerolls = events(db, sid, { types: ["pf2e.reroll"], limit: 10000 }).map((e) => ({ id: e.id, user: e.user, resource: e.data?.resource, old: e.data?.old, new: e.data?.new }));
-  const actions = {};
+  const actions = dict();
   for (const e of dedup(events(db, sid, { types: ["pf2e.action"], limit: 100000 }))) { const s = e.data?.item?.name ?? e.data?.item?.slug ?? "?"; actions[s] = (actions[s] ?? 0) + 1; }
   // sheet interactions enriched by the PF2e adapter
-  const rulesLookups = {}, strikeVariants = {};
+  const rulesLookups = dict(), strikeVariants = dict();
   for (const e of events(db, sid, { types: ["ui.action"], limit: 1_000_000 })) {
     const d = e.data ?? {};
     if (d.readsRules) {
@@ -493,7 +497,7 @@ export function pf2eSummary(db, sid) {
       const r = (rulesLookups[k] ??= { n: 0, users: [], ids: [] });
       r.n++; if (!r.users.includes(e.user)) r.users.push(e.user); if (r.ids.length < 8) r.ids.push(e.id);
     }
-    if (d.action === "strike-attack" && d.variant !== undefined) {
+    if (d.action === "strike-attack" && Number.isInteger(d.variant) && d.variant >= 0) {
       const k = `${d.item?.name ?? d.strike ?? "?"}`;
       (strikeVariants[k] ??= [0, 0, 0])[Math.min(2, d.variant)]++;
     }
@@ -505,8 +509,8 @@ export function pf2eSummary(db, sid) {
 
 export function usage(db, sid) {
   const rows = db.prepare(`SELECT user, type, COUNT(*) n FROM events WHERE session_id = ? AND type IN ('ui.app.open','ui.action','ui.tab','token.target','token.move','pf2e.check','pf2e.action','friction.mark','ui.notify') GROUP BY user, type`).all(sid);
-  const users = {};
-  for (const r of rows) (users[r.user] ??= {})[r.type] = r.n;
+  const users = dict();
+  for (const r of rows) (users[r.user] ??= dict())[r.type] = r.n;
   const apps = db.prepare(`SELECT user, json_extract(data, '$.cls') cls, COUNT(*) n FROM events WHERE session_id = ? AND type = 'ui.app.open' GROUP BY user, cls ORDER BY n DESC`).all(sid);
   const tabs = db.prepare(`SELECT user, json_extract(data, '$.cls') cls, json_extract(data, '$.tab') tab, COUNT(*) n FROM events WHERE session_id = ? AND type = 'ui.tab' GROUP BY user, cls, tab ORDER BY n DESC`).all(sid);
   for (const u of Object.keys(users)) {
@@ -527,13 +531,13 @@ function envOf(db, sid) {
     return rows.filter((r) => r.client_id === client);
   };
   const snap = pick("env.snapshot")[0]?.data ?? null;
-  const modules = Object.assign({}, ...pick("env.modules").map((r) => r.data?.modules ?? {}));
-  const settings = Object.assign({}, ...pick("env.settings").map((r) => r.data?.settings ?? {}));
+  const modules = Object.assign(dict(), ...pick("env.modules").map((r) => r.data?.modules ?? {}));
+  const settings = Object.assign(dict(), ...pick("env.settings").map((r) => r.data?.settings ?? {}));
   return { snap, modules, settings };
 }
 
 function diffMaps(a, b) {
-  const added = {}, removed = {}, changed = {};
+  const added = dict(), removed = dict(), changed = dict();
   for (const [k, v] of Object.entries(b)) if (!(k in a)) added[k] = v; else if (a[k] !== v) changed[k] = [a[k], v];
   for (const [k, v] of Object.entries(a)) if (!(k in b)) removed[k] = v;
   return { added, removed, changed };
@@ -544,15 +548,15 @@ export function compare(db, a, b) {
   const summ = (sid) => {
     const p = perf(db, sid);
     const names = sceneNames(db, sid);
-    const sc = {};
+    const sc = dict();
     for (const g of p.byClientScene) {
       const k = names[g.scene] ?? g.scene ?? "-";
-      (sc[k] ??= { fps: [], p95: [], stalls: 0, loadMs: [], byUser: {} }).fps.push(g.fpsMedian);
+      (sc[k] ??= { fps: [], p95: [], stalls: 0, loadMs: [], byUser: dict() }).fps.push(g.fpsMedian);
       sc[k].p95.push(g.frameP95Median);
       sc[k].byUser[g.user] = Math.min(sc[k].byUser[g.user] ?? Infinity, g.fpsMedian ?? Infinity);
     }
-    for (const s of p.stalls) { const k = names[s.scene] ?? s.scene ?? "-"; (sc[k] ??= { fps: [], p95: [], stalls: 0, loadMs: [], byUser: {} }).stalls++; }
-    for (const l of p.sceneLoads) { const k = l.sceneName ?? l.scene ?? "-"; (sc[k] ??= { fps: [], p95: [], stalls: 0, loadMs: [], byUser: {} }).loadMs.push(l.ms); }
+    for (const s of p.stalls) { const k = names[s.scene] ?? s.scene ?? "-"; (sc[k] ??= { fps: [], p95: [], stalls: 0, loadMs: [], byUser: dict() }).stalls++; }
+    for (const l of p.sceneLoads) { const k = l.sceneName ?? l.scene ?? "-"; (sc[k] ??= { fps: [], p95: [], stalls: 0, loadMs: [], byUser: dict() }).loadMs.push(l.ms); }
     const t = turns(db, sid).stats;
     const errs = errors(db, sid).filter((g) => g.type.startsWith("err"));
     return {

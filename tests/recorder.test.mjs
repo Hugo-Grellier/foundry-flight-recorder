@@ -231,3 +231,25 @@ test("close() persists undeliverable events; next activation re-sends them into 
   assert.equal(resent.sessionId, "s1");
   assert.equal(resent.events[0].type, "session.stop");
 });
+
+test("a hung send is aborted by the fetch timeout and retried (no permanently stuck flush)", async () => {
+  let calls = 0;
+  const h = harness({
+    fetchTimeoutMs: 50,
+    fetch: (url, init) => new Promise((resolve, reject) => {
+      calls++;
+      if (calls === 1) init.signal.addEventListener("abort", () => reject(new DOMException("timeout", "TimeoutError")));
+      else resolve({ ok: true, status: 200 });
+    }),
+  });
+  h.rec.activate();
+  h.rec.emit("session.stop", {});
+  const keepAlive = setTimeout(() => {}, 2000); // Node unrefs AbortSignal.timeout timers
+  await h.rec.flush();                     // first attempt hangs until the 50 ms timeout aborts it
+  clearTimeout(keepAlive);
+  assert.equal(h.rec.counters.failures, 1);
+  assert.equal(h.rec.queue.length, 1, "event kept for retry");
+  await h.rec.flush();
+  assert.equal(h.rec.queue.length, 0);
+  assert.equal(calls, 2);
+});

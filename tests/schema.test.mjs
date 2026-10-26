@@ -74,3 +74,11 @@ test("top-frame origin distinguishes the throw site from wrappers lower in the s
   assert.equal(topOrigin("TypeError: x\n    at onShare (http://h/modules/pf2e-toolbelt/main.js:1:2)\n    at y (http://h/systems/pf2e/pf2e.mjs:1:1)"), "pf2e-toolbelt");
   assert.equal(topOrigin("onShare@http://h/modules/tb/main.js:1:2"), "tb"); // Firefox format
 });
+
+test("sanitize drops prototype-mutating keys from parsed JSON", () => {
+  const out = sanitize(JSON.parse('{"__proto__": {"x": 1}, "constructor": "c", "a": {"__proto__": {"y": 2}, "b": 1}}'));
+  assert.deepEqual(Object.keys(out), ["a"]);
+  assert.equal(Object.getPrototypeOf(out), Object.prototype);
+  assert.equal(out.x, undefined);
+  assert.deepEqual(out.a, { b: 1 });
+});

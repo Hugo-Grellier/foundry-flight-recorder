@@ -92,7 +92,7 @@ export function sanitize(value, { depth = 0, key = "" } = {}) {
   let n = 0;
   for (const [k, v] of Object.entries(value)) {
     if (++n > 100) { out["…"] = "[truncated]"; break; }
-    if (SENSITIVE_KEY.test(k)) continue;
+    if (SENSITIVE_KEY.test(k) || k === "__proto__" || k === "constructor" || k === "prototype") continue;
     const s = sanitize(v, { depth: depth + 1, key: k });
     if (s !== undefined) out[k] = s;
   }

@@ -165,3 +165,24 @@ test("pf2e: rules-text lookups per item and strike MAP variants from enriched sh
   assert.deepEqual(p.rulesLookups["Electric Arc"].users, ["u_ezren"]);
   assert.ok(p.strikeVariantsMAP.Longsword[0] >= 1 && p.strikeVariantsMAP.Longsword[1] >= 1);
 });
+
+test("untrusted telemetry keys like __proto__ stay ordinary keys (no prototype pollution)", () => {
+  const f2 = file.replace("fx.db", "proto.db");
+  const d2 = openDb(f2);
+  const st = new Store(d2);
+  const T = 1_791_000_000_000;
+  const ev = (i, type, data) => ({ id: `cp.${i}`, seq: i, type, t: T + i, data });
+  st.ingest({ v: 1, sessionId: "proto", clientId: "cp", user: "u_p", sentAt: T, batchSeq: 0, events: [
+    ev(0, "ui.action", { action: "toggle-summary", readsRules: true, item: { name: "__proto__" } }),
+    ev(1, "ui.action", { action: "strike-attack", variant: "__proto__", item: { name: "constructor" } }),
+    ev(2, "pf2e.condition", { op: "create", item: { slug: "__proto__" } }),
+    ev(3, "env.modules", { modules: JSON.parse('{"__proto__": {"polluted": true}, "ok": "1"}') }),
+  ] }, { recv: T });
+  const p = A.pf2eSummary(d2, "proto");
+  assert.equal(p.rulesLookups.__proto__.n, 1);
+  assert.equal(p.conditionsApplied.__proto__, 1);
+  assert.deepEqual(Object.keys(p.strikeVariantsMAP), [], "non-integer variant ignored");
+  A.compare(d2, "proto", "proto");
+  assert.equal({}.polluted, undefined);
+  assert.equal(Object.prototype.polluted, undefined);
+});
