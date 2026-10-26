@@ -20,6 +20,7 @@
 - PF2e sheet enrichment via adapter `enrich()`: strike + MAP variant, spell rank/slot, rules-text lookups;
   surfaced in `ffr pf2e` (`rulesLookups`, `strikeVariantsMAP`).
 - `ffr trend`: per-session metrics over time, config-change flag, recurring error fingerprints.
+- HTTPS reverse proxy exercised with Caddy + collector image (docs/validation.md §5).
 - Pending: real-runtime verification of the above (`npm run e2e`) once the lab lead releases the lab.
 
 ## Decisions
@@ -29,7 +30,6 @@ See docs/architecture.md (ADR log).
 1. One e2e run lost the GM's last events before the close()/fetch-timeout mitigation; root cause unconfirmed.
 2. Validate with real players (consent UX, multi-hour stability, Firefox clients).
 3. Overhead measurement on a GPU-backed browser with repeated A/B runs.
-4. HTTPS reverse-proxy deployment test.
 5. P2: per-sheet semantic maps (PF2e strike/spell buttons), statistical anomaly baselines, multi-session trends,
    libWrapper-level attribution.
 6. Localization (module UI strings are English only).

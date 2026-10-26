@@ -82,6 +82,14 @@ disconnect + reload, collector loss) with evidence ids, alternatives and confide
 note as untrusted text, and refused causal claims from the session comparison. Event ids in the example
 refer to the dataset generated at that time (ids are random per generation).
 
+## 5. HTTPS reverse proxy (2026-10-26)
+
+Collector Docker image (`FFR_TRUST_PROXY=1`, origin `https://foundry.example.org`) behind Caddy 2 with
+`tls internal` and `handle_path /ffr/* { reverse_proxy 127.0.0.1:<port> }`: `GET /ffr/healthz` OK; `POST
+/ffr/v1/ingest` HTTP/2 200 with `Access-Control-Allow-Origin: https://foundry.example.org`; foreign origin 403;
+CORS preflight 204; event stored and listed by `ffr sessions` inside the container. No browser in the loop
+(curl with an Origin header).
+
 ## Not validated
 
 - Added after the last real-runtime run (2026-10-26, lab frozen by its owner): French/English localization,
@@ -90,5 +98,5 @@ refer to the dataset generated at that time (ids are random per generation).
 
 - A real session with human players (behaviour, consent UX, multi-hour stability, real network loss).
 - Firefox/Safari clients (no LoAF/long tasks/memory; DOM capture unverified).
-- HTTPS reverse-proxy deployment (documented, not exercised); Docker image exercised only by a local smoke test.
+- nginx variant of the reverse proxy (only the Caddy variant was exercised, see §5).
 - Overhead on GPU-backed browsers.
