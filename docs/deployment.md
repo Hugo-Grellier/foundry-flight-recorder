@@ -38,6 +38,11 @@ location /ffr/ {
 
 Endpoint in the module: `https://foundry.example.org/ffr/v1/ingest`, `FFR_ALLOWED_ORIGINS=https://foundry.example.org`,
 `FFR_TRUST_PROXY=1`. Caddy: `handle_path /ffr/* { reverse_proxy 127.0.0.1:4318 }`.
+Traefik (file provider): a router `Host(\`foundry.example\`) && PathPrefix(\`/ffr/\`)` (outranks the Foundry
+router, longer rule) with a `stripPrefix: {prefixes: [/ffr]}` middleware. Serving the collector under the Foundry
+origin makes ingest same-origin for every player: no CORS, no mixed content, no Chrome local-network prompt.
+Leave `FFR_TRUST_PROXY=0` when the first `X-Forwarded-For` entry can be client-supplied (e.g. behind Cloudflare):
+all clients then share the proxy's IP bucket (10 batches/s, burst 40), plenty for a table.
 
 LAN over plain HTTP works (`http://<host>:4318/v1/ingest`, publish the port on the LAN interface) but
 keys and telemetry travel unencrypted.
