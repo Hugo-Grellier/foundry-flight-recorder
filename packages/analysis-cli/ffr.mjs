@@ -27,6 +27,7 @@ Investigation (read-only):
   repeats <s>                   repeated/abandoned interaction patterns
   friction <s>                  participant friction markers with preceding context
   pf2e <s>                      PF2e checks/outcomes/conditions/rerolls/actions
+  rolls <s>                     who made each roll (module, system, macro, core UI) + likely duplicate rolls
   usage <s>                     per-user interaction counts, top windows/tabs
   gaps <s>                      missing telemetry (sequence gaps) per client
   compare <a> <b>               config diff + perf/errors/turns/friction deltas
@@ -120,6 +121,7 @@ try {
     case "repeats": print(A.repeats(db, sess(args[0]))); break;
     case "friction": print(A.friction(db, sess(args[0]), { before: A.parseDuration(o.before, 30000) })); break;
     case "pf2e": print(A.pf2eSummary(db, sess(args[0]))); break;
+    case "rolls": print(A.rolls(db, sess(args[0]))); break;
     case "usage": print(A.usage(db, sess(args[0]))); break;
     case "trend": print(A.trend(db, { last: Number(o.last ?? 10), world: o.world })); break;
     case "compare": if (args.length < 2) fail("compare needs two sessions"); print(A.compare(db, sess(args[0]), sess(args[1]))); break;

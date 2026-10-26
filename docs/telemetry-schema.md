@@ -64,7 +64,8 @@ floods; counts are reported in `rec.loss.data.sampledOut`. Triggers are never sa
 | `client.idle` | 0 | each | span; idle after 90 s without input |
 | `env.snapshot` | 0 | each | foundry/system/world, browser, gpu, perf support, fingerprints `fp{core,modules,settings,all}` |
 | `env.modules` / `env.settings` | 0 | each | chunks of `{id: version}` / `{"ns.key": value}` (filtered, see privacy) |
-| `err.js` / `err.promise` / `err.foundry` / `err.console` | 0 | each | msg, stack, top (package of the throw site), origins (all packages in the stack), versions, fp (fingerprint), file/line, location |
+| `err.js` / `err.promise` / `err.foundry` / `err.console` | 0 | each | msg, stack, top (package of the throw site), origins (all packages in the stack), versions, fp (fingerprint), file/line, location. `err.js`/`err.promise`/`err.foundry` are captured from module import on, so errors in other packages' init/setup/ready are included (packages imported before this one are not) |
+| `lw.conflict` | 0 | each | libWrapper's `libWrapper.ConflictDetected` hook: a, b (package ids), target (wrapped method) |
 | `warn.console` | 1 | each | same as errors |
 | `ui.notify` | 0 (info: 1) | each | kind, msg (rendered notification text) |
 | `ui.app.open` / `ui.app.close` | 0 | each | span; cls, appId, doc ref, title |
@@ -79,7 +80,8 @@ floods; counts are reported in `rec.loss.data.sampledOut`. Triggers are never sa
 | `scene.teardown` | 0 | each | |
 | `doc.create` / `doc.delete` | 0 | initiator | doc ref, parent ref |
 | `doc.update` | 1 (HP: 0) | initiator | changed key paths (no values), HP value/temp/max |
-| `chat.message` | 0 | author + active GM | msg id, style, rolls (formula, total, dice), whisper count, blind, speaker ids, flag scopes. **Never content** |
+| `chat.message` | 0 | author + active GM | msg id, style, rolls (formula, total, dice), whisper count, blind, speaker ids, flag scopes, corr `chat:<userId>:<timestamp>` for rolls. **Never content** |
+| `chat.origin` | 0 | creating client | before a roll message is created: rolls count, origins (packages on the creating stack, top first), macro (bool), stack (code locations only). Same corr as its `chat.message` |
 | `combat.start` / `combat.round` / `combat.end` | 0 | active GM | counts, round |
 | `combat.turn` | 0 | active GM | span per turn: combatant, actor, pc, round, turn |
 | `pf2e.check` | 0 | author + GM | ctype, outcome, unadjusted, dc, statistic, domains, traits, target present, isReroll, roll |
@@ -88,7 +90,7 @@ floods; counts are reported in `rec.loss.data.sampledOut`. Triggers are never sa
 | `pf2e.reroll` | 0 | own | resource, keep, old/new total |
 | `pf2e.damage` | 1 | own | roll |
 | `pf2e.condition` | 0 | initiator | op, condition/effect item ref, value, badge |
-| `perf.window` | 0 | each | every 10 s: fps, p50/p95/p99/max frame ms, long tasks, LoAF (top origins), heap, hidden ms, counts of expensive hooks |
+| `perf.window` | 0 | each | every 10 s: fps, p50/p95/p99/max frame ms, long tasks, LoAF (top origins), heap, hidden ms, latencyMs (Foundry's own one-way client-server estimate, `game.time.averageLatency`), counts of expensive hooks |
 | `perf.stall` | 0 | each | frame ≥ 1000 ms: ms, LoAF script attribution, hook counts |
 | `perf.loaf` | 1 | each | long animation frame ≥ 200 ms with scripts |
 | `net.socket` / `net.online` | 0 | each | Foundry socket connect/disconnect/reconnect; browser online |

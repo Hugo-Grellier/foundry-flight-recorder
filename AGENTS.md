@@ -56,6 +56,9 @@ Schema and event types: [`docs/telemetry-schema.md`](docs/telemetry-schema.md).
   package in the stack, including wrappers (libWrapper, timer/hook patches) that are merely involved.
   `detected` repeats libWrapper's own `[Detected N packages: ...]` note (culprit first): for hook errors
   (`Error thrown in hooked function`) it names the package that registered the hook, absent from the stack.
+  `ffr rolls` names who made each roll from the creating stack (bottom-most package = initiator); a roll fired
+  without being awaited can lose its initiator. `lw.conflict` (anomaly `wrapper-conflict`) means two packages
+  wrap the same method: a cause candidate for behaviour that changes with module combinations.
   LoAF script origins show which module ran during a slow frame. Both are evidence of involvement, not
   proof of root cause. GPU time is invisible.
 - **No judgement of people.** The data improves sessions; never rank players or describe a person's

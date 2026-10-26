@@ -36,7 +36,7 @@ export const EVENT_TYPES = Object.freeze({
   "token.control": { lvl: 0 }, "token.target": { lvl: 0 }, "token.move": { lvl: 0 },
   "scene.load": { lvl: 0 }, "scene.summary": { lvl: 0 }, "scene.teardown": { lvl: 0 },
   "doc.create": { lvl: 0 }, "doc.update": { lvl: 1 }, "doc.delete": { lvl: 0 },
-  "chat.message": { lvl: 0 },
+  "chat.message": { lvl: 0 }, "chat.origin": { lvl: 0 }, "lw.conflict": { lvl: 0 },
   "combat.start": { lvl: 0 }, "combat.end": { lvl: 0 }, "combat.round": { lvl: 0 }, "combat.turn": { lvl: 0 },
   "pf2e.turn": { lvl: 0 }, "pf2e.check": { lvl: 0 }, "pf2e.reroll": { lvl: 0 }, "pf2e.damage": { lvl: 0 },
   "pf2e.condition": { lvl: 0 }, "pf2e.action": { lvl: 0 },

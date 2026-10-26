@@ -71,7 +71,9 @@ export function installPerf(rec) {
         over50: frames.filter((f) => f > 50).length, over100: frames.filter((f) => f > 100).length,
         longTasks: { n: longTasks.n, ms: Math.round(longTasks.ms) },
         loaf: { n: loaf.n, ms: Math.round(loaf.ms), blocking: Math.round(loaf.blocking), topOrigins: Object.fromEntries(topOrigins) },
-        heapMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null, hiddenMs: Math.round(hiddenMs),
+        heapMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+        hiddenMs: Math.round(hiddenMs),
+        latencyMs: game.time?.averageLatency ?? null, // Foundry's one-way estimate from its periodic time sync
         hooks: Object.fromEntries(Object.entries(hookCounts).filter(([, v]) => v)),
         canvas: globalThis.canvas?.ready ? { fpsTarget: canvas.app?.ticker?.maxFPS ?? null, tokens: canvas.tokens?.placeables?.length ?? null, zoom: round(canvas.stage?.scale?.x) } : null,
       });

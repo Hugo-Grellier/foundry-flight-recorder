@@ -85,7 +85,7 @@ export function changedPaths(change, max = 20) {
 }
 
 export const combatCtx = () => {
-  const c = game.combat;
+  const c = globalThis.game?.combat; // also called for errors thrown before init
   if (!c?.started) return undefined;
   return { id: c.id, round: c.round, turn: c.turn };
 };

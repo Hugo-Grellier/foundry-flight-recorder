@@ -1,6 +1,6 @@
 // Foundry Flight Recorder: entry point. Settings, consent, session lifecycle, status badge, friction markers.
 import { Recorder, RECORDER_VERSION } from "./recorder.mjs";
-import { installCapture, emitSceneSummary } from "./capture.mjs";
+import { installCapture, installEarly, emitSceneSummary } from "./capture.mjs";
 import { installPerf } from "./perf.mjs";
 import { emitEnvironment } from "./env.mjs";
 import { installAdapters } from "./adapters/index.mjs";
@@ -161,28 +161,32 @@ async function stopSession() {
 }
 
 // ---------------------------------------------------------------------------
+// Created at import, before any init hook runs, so boot-time errors are captured (capture.mjs installEarly).
+const FP = () => foundry.applications.apps.FilePicker.implementation;
+store = new FoundryStore({
+  upload: async (dir, name, text) => {
+    const fd = new FormData(); // FilePicker.upload() would raise a UI notification on every failure
+    fd.set("source", "data"); fd.set("target", dir); fd.set("upload", new File([text], name, { type: "application/json" }));
+    return (await window.fetch(FP().uploadURL, { method: "POST", body: fd })).json();
+  },
+  mkdir: (p) => FP().createDirectory("data", p),
+  emit: (msg, recipients) => game.socket.emit(`module.${MOD}`, msg, { recipients }),
+  canUpload: () => game.user.can("FILES_UPLOAD"),
+  relayTo: () => game.users.activeGM?.id ?? null,
+  isRelay: () => get("enabled") && game.users.activeGM?.isSelf === true,
+  pseudo: (userId) => pseudo(game.world.id, userId),
+});
+rec = new Recorder({
+  fetch: (u, i) => (u === FOUNDRY_ENDPOINT ? store.send(u, i) : window.fetch(u, i)),
+  beacon: (u, body) => u !== FOUNDRY_ENDPOINT && (navigator.sendBeacon?.(u, new Blob([body], { type: "text/plain" })) ?? false),
+  storage: window.localStorage, // storageKey: set at init, once the world is known
+  context: () => ({ scene: globalThis.canvas?.scene?.id, combat: combatCtx() }),
+});
+installEarly(rec);
+
 Hooks.once("init", () => {
   registerSettings();
-  const FP = () => foundry.applications.apps.FilePicker.implementation;
-  store = new FoundryStore({
-    upload: async (dir, name, text) => {
-      const fd = new FormData(); // FilePicker.upload() would raise a UI notification on every failure
-      fd.set("source", "data"); fd.set("target", dir); fd.set("upload", new File([text], name, { type: "application/json" }));
-      return (await window.fetch(FP().uploadURL, { method: "POST", body: fd })).json();
-    },
-    mkdir: (p) => FP().createDirectory("data", p),
-    emit: (msg, recipients) => game.socket.emit(`module.${MOD}`, msg, { recipients }),
-    canUpload: () => game.user.can("FILES_UPLOAD"),
-    relayTo: () => game.users.activeGM?.id ?? null,
-    isRelay: () => get("enabled") && game.users.activeGM?.isSelf === true,
-    pseudo: (userId) => pseudo(game.world.id, userId),
-  });
-  rec = new Recorder({
-    fetch: (u, i) => (u === FOUNDRY_ENDPOINT ? store.send(u, i) : window.fetch(u, i)),
-    beacon: (u, body) => u !== FOUNDRY_ENDPOINT && (navigator.sendBeacon?.(u, new Blob([body], { type: "text/plain" })) ?? false),
-    storage: window.localStorage, storageKey: `ffr.pending.${game.world?.id ?? "world"}`,
-    context: () => ({ scene: globalThis.canvas?.scene?.id, combat: combatCtx() }),
-  });
+  rec.o.storageKey = `ffr.pending.${game.world?.id ?? "world"}`;
   state.worldId = game.world?.id ?? "";
   try { state.includeNames = get("includeNames"); rec.configure({ mode: get("mode") }); } catch { /* world settings not readable yet */ }
   if (!get("enabled")) rec.disable(); // nothing is buffered when the GM never enabled the recorder

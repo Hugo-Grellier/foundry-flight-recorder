@@ -8,40 +8,16 @@ const IDLE_MS = 90000;
 // Adapters push (el, app, data) => void functions here to add system semantics to ui.action events.
 export const actionEnrichers = [];
 
-export function installCapture(rec, opts) {
-  const safe = (fn) => function (...args) { try { fn.apply(this, args); } catch { rec.counters.selfErrors++; } };
+const safeFor = (rec) => (fn) => function (...args) { try { fn.apply(this, args); } catch { rec.counters.selfErrors++; } };
+
+/**
+ * Installed when the module file is imported, before any init hook runs: errors thrown by other packages
+ * while loading, in init/setup/ready, and libWrapper conflicts registered then are recorded too (held in
+ * memory until a session starts, dropped if recording is off). Packages imported before this one are missed.
+ */
+export function installEarly(rec) {
+  const safe = safeFor(rec);
   const on = (hook, fn) => Hooks.on(hook, safe(fn));
-
-  installErrors(rec, safe, on, opts);
-  installNotifications(rec, safe);
-  installUi(rec, safe, on);
-  installCanvas(rec, on);
-  installDocuments(rec, on);
-  installChat(rec, on);
-  installCombat(rec, on);
-  installNetwork(rec, safe, on);
-}
-
-// ---------------------------------------------------------------------------
-function errData(msg, stack, extra = {}) {
-  const origins = originsFromStack(stack);
-  const versions = {};
-  for (const o of origins) {
-    const pkg = o.startsWith("system:") ? (game.system?.id === o.slice(7) ? game.system : null) : game.modules?.get(o);
-    if (pkg?.version) versions[o] = pkg.version;
-  }
-  const top = topOrigin(stack);
-  return { msg: String(msg ?? "").slice(0, 500), stack, top, origins, versions, fp: errorFingerprint(msg, top ?? origins[0]), ...extra };
-}
-
-function installErrors(rec, safe, on, opts) {
-  let last = { msg: null, t: 0 };
-  const seen = (msg) => {
-    const now = Date.now();
-    const dup = msg === last.msg && now - last.t < 2000;
-    last = { msg, t: now };
-    return dup;
-  };
   window.addEventListener("error", safe((ev) => {
     const msg = ev.message ?? ev.error?.message ?? "error";
     if (seen(msg)) return;
@@ -58,7 +34,50 @@ function installErrors(rec, safe, on, opts) {
     if (seen(error?.message)) return;
     rec.emit("err.foundry", errData(error?.message, error?.stack ?? "", { location: String(location).slice(0, 120), dataKeys: Object.keys(data ?? {}).slice(0, 10) }), { sev: "error" });
   });
+  // libWrapper's documented hook (Hooks.call): two packages wrap the same method. Returning nothing never
+  // suppresses libWrapper's own conflict warning.
+  on("libWrapper.ConflictDetected", (pkgA, pkgB, target) => {
+    rec.emit("lw.conflict", { a: String(pkgA), b: String(pkgB), target: String(target).slice(0, 200) }, { sev: "warn", dk: `lw:${pkgA}:${pkgB}:${target}` });
+  });
+}
 
+export function installCapture(rec, opts) {
+  const safe = safeFor(rec);
+  const on = (hook, fn) => Hooks.on(hook, safe(fn));
+
+  installConsole(rec, opts);
+  installNotifications(rec, safe);
+  installUi(rec, safe, on);
+  installCanvas(rec, on);
+  installDocuments(rec, on);
+  installChat(rec, on);
+  installCombat(rec, on);
+  installNetwork(rec, safe, on);
+}
+
+// ---------------------------------------------------------------------------
+function errData(msg, stack, extra = {}) {
+  const origins = originsFromStack(stack);
+  const versions = {};
+  const g = globalThis.game; // may still be incomplete for errors thrown before init
+  for (const o of origins) {
+    const pkg = o.startsWith("system:") ? (g?.system?.id === o.slice(7) ? g.system : null) : g?.modules?.get?.(o);
+    if (pkg?.version) versions[o] = pkg.version;
+  }
+  const top = topOrigin(stack);
+  return { msg: String(msg ?? "").slice(0, 500), stack, top, origins, versions, fp: errorFingerprint(msg, top ?? origins[0]), ...extra };
+}
+
+// Same message within 2 s (one failure reported by several channels): keep the first.
+let last = { msg: null, t: 0 };
+const seen = (msg) => {
+  const now = Date.now();
+  const dup = msg === last.msg && now - last.t < 2000;
+  last = { msg, t: now };
+  return dup;
+};
+
+function installConsole(rec, opts) {
   if (!opts.captureConsole) return;
   // Wrap console.error/warn: call the original first, then record. Reentrancy is blocked by
   // Recorder.emit, and the recorder itself never logs through console.error.
@@ -260,7 +279,16 @@ export function rollData(roll) {
   } catch { return null; }
 }
 
-function installChat(rec, on) {
+export function installChat(rec, on) {
+  // Who made a roll: preCreateChatMessage runs in the creating client, inside the caller's (async) stack,
+  // so the packages on that stack are the roll's origin (module automation, system, macro, or core UI).
+  on("preCreateChatMessage", (doc, data, options, userId) => {
+    if (!isSelf(userId) || !(doc.rolls?.length || data?.rolls?.length)) return;
+    const stack = new Error().stack?.split("\n").slice(2, 40).join("\n") ?? "";
+    const origins = originsFromStack(stack).filter((o) => o !== "foundry-flight-recorder");
+    rec.emit("chat.origin", { rolls: (doc.rolls ?? data.rolls).length, origins, macro: /\bMacro\b|executeScript/.test(stack), stack },
+      { local: true, corr: `chat:${userId}:${doc.timestamp}` });
+  });
   on("createChatMessage", (msg, options, userId) => {
     const local = isSelf(userId);
     if (!local && !isActiveGM()) return; // the active GM records others' messages once (dk dedups)
@@ -270,7 +298,7 @@ function installChat(rec, on) {
       whisper: msg.whisper?.length ?? 0, blind: !!msg.blind, author: userRef(msg.author),
       speaker: { actor: sp.actor ?? null, token: sp.token ?? null, alias: state.includeNames ? sp.alias ?? null : undefined },
       flagScopes: Object.keys(msg.flags ?? {}).slice(0, 10), // which modules decorated the message (no values)
-    }, { local, dk: `chat:${msg.id}` });
+    }, { local, dk: `chat:${msg.id}`, corr: msg.isRoll ? `chat:${userId}:${msg.timestamp}` : undefined });
   });
 }
 

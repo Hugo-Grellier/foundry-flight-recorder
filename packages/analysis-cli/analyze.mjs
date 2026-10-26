@@ -327,12 +327,13 @@ export function perf(db, sid, { scene, client } = {}) {
     if (!e.data?.frames) continue; // hidden tab
     const k = `${e.scene ?? "-"}|${e.client_id}`;
     let g = groups.get(k);
-    if (!g) groups.set(k, (g = { scene: e.scene, sceneName: names[e.scene] ?? null, client: e.client_id, user: e.user, windows: 0, fps: [], p95: [], max: 0, maxId: null, longTaskMs: 0, loafMs: 0, origins: dict(), heap: [] }));
+    if (!g) groups.set(k, (g = { scene: e.scene, sceneName: names[e.scene] ?? null, client: e.client_id, user: e.user, windows: 0, fps: [], p95: [], max: 0, maxId: null, longTaskMs: 0, loafMs: 0, origins: dict(), heap: [], latency: [] }));
     g.windows++; g.fps.push(e.data.fps); g.p95.push(e.data.p95);
     if (e.data.max > g.max) { g.max = e.data.max; g.maxId = e.id; }
     g.longTaskMs += e.data.longTasks?.ms ?? 0; g.loafMs += e.data.loaf?.ms ?? 0;
     for (const [o, ms] of Object.entries(e.data.loaf?.topOrigins ?? {})) g.origins[o] = (g.origins[o] ?? 0) + ms;
     if (e.data.heapMb) g.heap.push(e.data.heapMb);
+    if (Number.isFinite(e.data.latencyMs)) g.latency.push(e.data.latencyMs);
   }
   const stalls = events(db, sid, { types: ["perf.stall"], client, limit: 1000 }).filter((e) => !scene || e.scene === scene)
     .map((e) => ({ id: e.id, at: fmtRel(e.tc - t0), client: e.client_id, user: e.user, scene: e.scene, ms: e.data?.ms, attribution: e.data?.attribution ?? [] }));
@@ -345,10 +346,48 @@ export function perf(db, sid, { scene, client } = {}) {
       longTaskMsPerMin: Math.round((g.longTaskMs / (g.windows * 10)) * 60), loafMsPerMin: Math.round((g.loafMs / (g.windows * 10)) * 60),
       loafTopOrigins: Object.fromEntries(Object.entries(g.origins).sort((a, b) => b[1] - a[1]).slice(0, 6)),
       heapMbMax: g.heap.length ? Math.max(...g.heap) : null,
+      latencyMsMedian: median(g.latency), latencyMsMax: g.latency.length ? Math.max(...g.latency) : null,
     })),
     stalls, sceneLoads: loads,
     caveat: "LoAF script attribution is the script that ran during a long frame; it is evidence of involvement, not proof of root cause. GPU time is not observable.",
   };
+}
+
+// ---------------------------------------------------------------------------
+// Roll origins
+
+const WRAPPERS = new Set(["lib-wrapper", "socketlib"]); // on many stacks, never the initiator by themselves
+
+/**
+ * Who made each roll (chat.origin, recorded in the creating client's stack) joined with its chat.message
+ * (corr). Initiator = the bottom-most package on the stack (the one that started the call chain), "macro"
+ * for macro code, "core-ui" when only Foundry core was on the stack (a click on core UI).
+ */
+export function rolls(db, sid, { dupWindowMs = 3000 } = {}) {
+  const t0 = sessionT0(db, sid);
+  const origins = events(db, sid, { types: ["chat.origin"], limit: 100000 });
+  const msgs = new Map(events(db, sid, { types: ["chat.message"], limit: 100000 }).filter((e) => e.corr).map((e) => [e.corr, e]));
+  const list = origins.map((o) => {
+    const pk = (o.data?.origins ?? []).filter((p) => !WRAPPERS.has(p));
+    const m = msgs.get(o.corr);
+    return {
+      id: o.id, msgEvent: m?.id ?? null, at: fmtRel(o.tc - t0), tc: o.tc, user: o.user,
+      initiator: o.data?.macro ? "macro" : pk.at(-1) ?? "core-ui", via: pk, actor: m?.data?.speaker?.actor ?? null,
+      formulas: (m?.data?.rolls ?? []).map((r) => r?.formula).filter(Boolean),
+    };
+  });
+  const byInitiator = {};
+  for (const r of list) byInitiator[r.initiator] = (byInitiator[r.initiator] ?? 0) + 1;
+  // Same actor, same formulas, close in time, different initiators: two packages rolling the same thing.
+  const duplicates = [];
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length && list[j].tc - list[i].tc <= dupWindowMs; j++) {
+    const a = list[i], b = list[j];
+    if (a.actor && a.actor === b.actor && a.initiator !== b.initiator && a.formulas.length && a.formulas.join() === b.formulas.join()) {
+      duplicates.push({ at: a.at, actor: a.actor, formulas: a.formulas, initiators: [a.initiator, b.initiator], ids: [a.id, b.id, a.msgEvent, b.msgEvent].filter(Boolean) });
+    }
+  }
+  return { total: list.length, byInitiator, duplicates, rolls: list.slice(0, 200).map(({ tc, ...r }) => r),
+    caveat: "Origins come from the creating client's stack; a package that fired a roll without awaiting it can be missing (async stack cut)." };
 }
 
 export function sceneNames(db, sid) {
@@ -465,6 +504,14 @@ export function anomalies(db, sid) {
       : `throw site not in a package${g.detected.length ? `; libWrapper suspects: ${g.detected.join(", ")}` : g.origins.length ? `; packages in stack: ${g.origins.join(", ")}` : ""}`;
     add(g.count >= 5 || g.users.length > 1 ? "high" : "medium", "error", `${g.type} x${g.count} (${g.users.length} user(s)) ${where}: ${String(g.msg).slice(0, 140)}`, g.ids, { throwSite: g.throwSite, detected: g.detected, origins: g.origins, versions: g.versions });
   }
+  const conflicts = new Map();
+  for (const e of events(db, sid, { types: ["lw.conflict"], limit: 10000 })) {
+    const k = `${e.data?.a}|${e.data?.b}|${e.data?.target}`;
+    if (!conflicts.has(k)) conflicts.set(k, { ...e.data, ids: [] });
+    conflicts.get(k).ids.push(e.id);
+  }
+  for (const c of conflicts.values()) add("medium", "wrapper-conflict", `libWrapper conflict: ${c.a} and ${c.b} both wrap ${c.target}`, c.ids, { packages: [c.a, c.b], target: c.target });
+  for (const d of rolls(db, sid).duplicates) add("medium", "duplicate-roll", `same roll (${d.formulas.join(", ")}) made twice within 3 s for actor ${d.actor}, by ${d.initiators.join(" and ")}`, d.ids, { initiators: d.initiators });
   for (const g of errors(db, sid).filter((g) => g.type === "ui.notify")) {
     add(g.count >= 3 ? "medium" : "low", "warning-notification", `UI ${g.sev} shown x${g.count}: "${String(g.msg).slice(0, 140)}"`, g.ids);
   }
@@ -612,6 +659,7 @@ export function digest(db, sid) {
     frictions: friction(db, sid).map(({ lastInteractions, ...f }) => f),
     patterns: repeats(db, sid).slice(0, 40),
     pf2e: pf2eSummary(db, sid), usage: usage(db, sid),
+    rolls: (({ rolls: r, ...x }) => x)(rolls(db, sid)),
   };
 }
 
