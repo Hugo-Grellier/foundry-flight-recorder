@@ -22,7 +22,11 @@ new Store(db).ingest({ v: 1, sessionId: "s1", clientId: "c1", user: "u_1", sentA
   ev("lw.conflict", 3000, { a: "mod-a", b: "mod-b", target: "Token.prototype.refresh" }),
   ev("lw.conflict", 3100, { a: "mod-a", b: "mod-b", target: "Token.prototype.refresh" }),
   ev("perf.window", 10000, { frames: 600, fps: 60, p95: 17, max: 20, latencyMs: 40 }),
-  ev("perf.window", 20000, { frames: 600, fps: 60, p95: 17, max: 20, latencyMs: 300 }),
+  ev("perf.window", 20000, { frames: 600, fps: 60, p95: 17, max: 20, latencyMs: 300, hookTime: { "slow-mod": { calls: 50, ms: 400 }, "system:pf2e": { calls: 9, ms: 20 } } }),
+  ev("hook.veto", 21000, { hook: "preCreateChatMessage", pkg: "blocker", fn: "deny" }),
+  ev("hook.veto", 21500, { hook: "preCreateChatMessage", pkg: "blocker", fn: "deny" }),
+  ev("friction.mark", 30000, { cat: "broken" }),
+  ev("hook.veto", 90000, { hook: "preUpdateToken", pkg: "walls-mod", fn: null }),
 ] }, { recv: T });
 
 test("roll initiators: bottom-most package, wrappers skipped, core UI when no package", () => {
@@ -43,4 +47,7 @@ test("anomalies report the libWrapper conflict once and the duplicate roll; perf
   const p = A.perf(db, "s1").byClientScene[0];
   assert.equal(p.latencyMsMax, 300);
   assert.equal(p.latencyMsMedian, 300); // project median: upper middle value
+  assert.deepEqual(p.hookMsPerMinByPackage, { "slow-mod": 2400, "system:pf2e": 120 }); // one profiled 10 s window
+  const v = an.filter((a) => a.kind === "hook-veto");
+  assert.deepEqual(v.map((x) => [x.package, x.severity, x.evidence.length]), [["blocker", "medium", 2], ["walls-mod", "low", 1]]);
 });

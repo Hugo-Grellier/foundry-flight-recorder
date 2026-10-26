@@ -57,7 +57,8 @@ export function installCapture(rec, opts) {
 
 // ---------------------------------------------------------------------------
 function errData(msg, stack, extra = {}) {
-  const origins = originsFromStack(stack);
+  // Our hook wrappers (hooks.mjs) sit on the stack of every wrapped listener: never an origin themselves.
+  const origins = originsFromStack(stack).filter((o) => o !== "foundry-flight-recorder");
   const versions = {};
   const g = globalThis.game; // may still be incomplete for errors thrown before init
   for (const o of origins) {

@@ -59,6 +59,10 @@ Schema and event types: [`docs/telemetry-schema.md`](docs/telemetry-schema.md).
   `ffr rolls` names who made each roll from the creating stack (bottom-most package = initiator); a roll fired
   without being awaited can lose its initiator. `lw.conflict` (anomaly `wrapper-conflict`) means two packages
   wrap the same method: a cause candidate for behaviour that changes with module combinations.
+  `hook.veto` (anomaly `hook-veto`) names the package whose pre* listener cancelled an action: strong
+  evidence for "I clicked and nothing happened" when it precedes a friction marker. `hookMsPerMinByPackage`
+  (`ffr perf`, diagnostic sessions only) is synchronous listener time by registering package; async work and
+  rendering triggered later are not included. Ignore `foundry-flight-recorder` frames in stacks (our wrappers).
   LoAF script origins show which module ran during a slow frame. Both are evidence of involvement, not
   proof of root cause. GPU time is invisible.
 - **No judgement of people.** The data improves sessions; never rank players or describe a person's

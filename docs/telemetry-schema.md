@@ -65,6 +65,8 @@ floods; counts are reported in `rec.loss.data.sampledOut`. Triggers are never sa
 | `env.snapshot` | 0 | each | foundry/system/world, browser, gpu, perf support, fingerprints `fp{core,modules,settings,all}` |
 | `env.modules` / `env.settings` | 0 | each | chunks of `{id: version}` / `{"ns.key": value}` (filtered, see privacy) |
 | `err.js` / `err.promise` / `err.foundry` / `err.console` | 0 | each | msg, stack, top (package of the throw site), origins (all packages in the stack), versions, fp (fingerprint), file/line, location. `err.js`/`err.promise`/`err.foundry` are captured from module import on, so errors in other packages' init/setup/ready are included (packages imported before this one are not) |
+| `hook.veto` | 0 | each | a pre* hook listener returned `false` (action cancelled): hook, pkg (registering package, `untagged` if registered before this module loaded), fn name |
+| `rec.profiling` | 0 | each | hook timing suspended: reason (`overhead`, `hooks-replaced`), overheadMs |
 | `lw.conflict` | 0 | each | libWrapper's `libWrapper.ConflictDetected` hook: a, b (package ids), target (wrapped method) |
 | `warn.console` | 1 | each | same as errors |
 | `ui.notify` | 0 (info: 1) | each | kind, msg (rendered notification text) |
@@ -90,7 +92,7 @@ floods; counts are reported in `rec.loss.data.sampledOut`. Triggers are never sa
 | `pf2e.reroll` | 0 | own | resource, keep, old/new total |
 | `pf2e.damage` | 1 | own | roll |
 | `pf2e.condition` | 0 | initiator | op, condition/effect item ref, value, badge |
-| `perf.window` | 0 | each | every 10 s: fps, p50/p95/p99/max frame ms, long tasks, LoAF (top origins), heap, hidden ms, latencyMs (Foundry's own one-way client-server estimate, `game.time.averageLatency`), counts of expensive hooks |
+| `perf.window` | 0 | each | every 10 s: fps, p50/p95/p99/max frame ms, long tasks, LoAF (top origins), heap, hidden ms, hookTime (`diagnostic` mode only: top packages by synchronous hook-listener time {calls, ms, max, maxHook}) + hookOverheadMs, latencyMs (Foundry's own one-way client-server estimate, `game.time.averageLatency`), counts of expensive hooks |
 | `perf.stall` | 0 | each | frame ≥ 1000 ms: ms, LoAF script attribution, hook counts |
 | `perf.loaf` | 1 | each | long animation frame ≥ 200 ms with scripts |
 | `net.socket` / `net.online` | 0 | each | Foundry socket connect/disconnect/reconnect; browser online |

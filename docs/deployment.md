@@ -81,7 +81,8 @@ node scripts/build-module.mjs --install /path/to/FoundryData/Data/modules
 
 Restart Foundry (new packages are discovered at startup), enable *Flight Recorder* in the world, then in
 *Configure Settings → Flight Recorder*: enable, collector URL (empty = files on the Foundry server),
-ingest key (collector only), mode, entity names.
+ingest key (collector only), mode, entity names. Mode *diagnostic* also times every hook listener per
+package (`ffr perf`); it suspends itself above 2 % overhead. Keep it off for performance measurements.
 
 ## 4. Recording a session
 

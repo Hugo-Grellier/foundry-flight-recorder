@@ -48,9 +48,16 @@
 8. **Who records what**: user-initiated things on the initiator's client; globally observable things
    (combat turns, chat of others, connections) on the active GM only. Players who opt out stay invisible.
 9. **Adaptive capture**: three modes + ring buffer + trigger escalation (see telemetry-schema.md).
-10. **Passive capture only**: `Hooks.on` handlers wrapped in try/catch returning nothing (never vetoing),
-    capture-phase passive DOM listeners, MutationObserver on `#notifications`, PerformanceObserver.
-    The only wrapper is `console.error/warn` (calls the original first; can be disabled by setting).
+10. **Passive capture, plus three transparent wrappers**: `Hooks.on` handlers wrapped in try/catch returning
+    nothing (never vetoing), capture-phase passive DOM listeners, MutationObserver on `#notifications`,
+    PerformanceObserver. Wrappers, each calling the original with the same `this`/arguments and returning or
+    throwing exactly what it does: `console.error/warn` (can be disabled by setting) and, in `hooks.mjs`,
+    `Hooks.on`/`Hooks.off` (tag the registering package; translate `off(fn)` to our wrapper) and the `fn` of
+    hook entries (pre* hooks always, to see vetoes; every hook in `diagnostic` mode, to time listeners).
+    `Hooks.call`/`callAll` are never replaced, so Foundry keeps handling `once`, `onError` and the `false`
+    short-circuit. *Trade-off:* our wrapper frame appears in the stack of wrapped listeners' errors (analysis
+    ignores it; libWrapper's `[Detected packages]` note may list `foundry-flight-recorder`). Timing suspends
+    itself above 2 % overhead or when another tool replaces `Hooks.call`/`callAll` (2026-10-26, Hugo).
 11. **No dashboard.** The analyst is Codex with a CLI; humans read the generated report.
 13. **Collector-less default storage** (module persistent storage on the Foundry server). Modules run no
     server code, so the only server writes available are Foundry's own upload endpoint (permission

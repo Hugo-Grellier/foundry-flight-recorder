@@ -327,13 +327,14 @@ export function perf(db, sid, { scene, client } = {}) {
     if (!e.data?.frames) continue; // hidden tab
     const k = `${e.scene ?? "-"}|${e.client_id}`;
     let g = groups.get(k);
-    if (!g) groups.set(k, (g = { scene: e.scene, sceneName: names[e.scene] ?? null, client: e.client_id, user: e.user, windows: 0, fps: [], p95: [], max: 0, maxId: null, longTaskMs: 0, loafMs: 0, origins: dict(), heap: [], latency: [] }));
+    if (!g) groups.set(k, (g = { scene: e.scene, sceneName: names[e.scene] ?? null, client: e.client_id, user: e.user, windows: 0, fps: [], p95: [], max: 0, maxId: null, longTaskMs: 0, loafMs: 0, origins: dict(), heap: [], latency: [], hookMs: dict(), hookWindows: 0 }));
     g.windows++; g.fps.push(e.data.fps); g.p95.push(e.data.p95);
     if (e.data.max > g.max) { g.max = e.data.max; g.maxId = e.id; }
     g.longTaskMs += e.data.longTasks?.ms ?? 0; g.loafMs += e.data.loaf?.ms ?? 0;
     for (const [o, ms] of Object.entries(e.data.loaf?.topOrigins ?? {})) g.origins[o] = (g.origins[o] ?? 0) + ms;
     if (e.data.heapMb) g.heap.push(e.data.heapMb);
     if (Number.isFinite(e.data.latencyMs)) g.latency.push(e.data.latencyMs);
+    if (e.data.hookTime) { g.hookWindows++; for (const [p, s] of Object.entries(e.data.hookTime)) g.hookMs[p] = (g.hookMs[p] ?? 0) + (s?.ms ?? 0); }
   }
   const stalls = events(db, sid, { types: ["perf.stall"], client, limit: 1000 }).filter((e) => !scene || e.scene === scene)
     .map((e) => ({ id: e.id, at: fmtRel(e.tc - t0), client: e.client_id, user: e.user, scene: e.scene, ms: e.data?.ms, attribution: e.data?.attribution ?? [] }));
@@ -347,6 +348,9 @@ export function perf(db, sid, { scene, client } = {}) {
       loafTopOrigins: Object.fromEntries(Object.entries(g.origins).sort((a, b) => b[1] - a[1]).slice(0, 6)),
       heapMbMax: g.heap.length ? Math.max(...g.heap) : null,
       latencyMsMedian: median(g.latency), latencyMsMax: g.latency.length ? Math.max(...g.latency) : null,
+      // diagnostic sessions only: synchronous hook-listener time per registering package, per profiled minute
+      hookMsPerMinByPackage: g.hookWindows ? Object.fromEntries(Object.entries(g.hookMs).sort((x, y) => y[1] - x[1]).slice(0, 8)
+        .map(([p, ms]) => [p, Math.round((ms / (g.hookWindows * 10)) * 60)])) : undefined,
     })),
     stalls, sceneLoads: loads,
     caveat: "LoAF script attribution is the script that ran during a long frame; it is evidence of involvement, not proof of root cause. GPU time is not observable.",
@@ -511,6 +515,21 @@ export function anomalies(db, sid) {
     conflicts.get(k).ids.push(e.id);
   }
   for (const c of conflicts.values()) add("medium", "wrapper-conflict", `libWrapper conflict: ${c.a} and ${c.b} both wrap ${c.target}`, c.ids, { packages: [c.a, c.b], target: c.target });
+  const frictionT = events(db, sid, { types: ["friction.mark"], limit: 10000 }).map((e) => e.tc);
+  const vetoes = new Map();
+  for (const e of events(db, sid, { types: ["hook.veto"], limit: 10000 })) {
+    const k = `${e.data?.pkg}|${e.data?.hook}`;
+    if (!vetoes.has(k)) vetoes.set(k, { ...e.data, ids: [], beforeFriction: false });
+    const v = vetoes.get(k);
+    v.ids.push(e.id);
+    if (frictionT.some((t) => t >= e.tc && t - e.tc <= 30000)) v.beforeFriction = true;
+  }
+  for (const v of vetoes.values()) {
+    add(v.beforeFriction ? "medium" : "low", "hook-veto", `${v.pkg} cancelled ${v.hook} x${v.ids.length} (listener returned false)${v.beforeFriction ? ", within 30 s before a friction marker" : ""}`, v.ids, { package: v.pkg, hook: v.hook });
+  }
+  for (const e of events(db, sid, { types: ["rec.profiling"], limit: 100 })) {
+    add("low", "profiling-suspended", `hook timing suspended on ${e.client_id} (${e.data?.reason}): later hook times missing for that client`, [e.id]);
+  }
   for (const d of rolls(db, sid).duplicates) add("medium", "duplicate-roll", `same roll (${d.formulas.join(", ")}) made twice within 3 s for actor ${d.actor}, by ${d.initiators.join(" and ")}`, d.ids, { initiators: d.initiators });
   for (const g of errors(db, sid).filter((g) => g.type === "ui.notify")) {
     add(g.count >= 3 ? "medium" : "low", "warning-notification", `UI ${g.sev} shown x${g.count}: "${String(g.msg).slice(0, 140)}"`, g.ids);

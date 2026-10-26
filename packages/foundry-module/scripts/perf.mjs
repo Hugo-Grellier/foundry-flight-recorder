@@ -10,7 +10,7 @@ const COUNTED_HOOKS = ["sightRefresh", "lightingRefresh", "initializeVisionSourc
 const pct = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : null);
 const round = (n) => (n == null ? null : Math.round(n * 10) / 10);
 
-export function installPerf(rec) {
+export function installPerf(rec, hookProf) {
   let frames = [], last = 0, longTasks = { n: 0, ms: 0 }, loaf = { n: 0, ms: 0, blocking: 0, origins: {} };
   let hookCounts = Object.fromEntries(COUNTED_HOOKS.map((h) => [h, 0]));
   let hiddenMs = 0, hiddenAt = document.hidden ? performance.now() : null;
@@ -65,6 +65,8 @@ export function installPerf(rec) {
       if (hiddenAt != null) { hiddenMs += performance.now() - hiddenAt; hiddenAt = performance.now(); }
       const mem = performance.memory;
       const topOrigins = Object.entries(loaf.origins).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const ht = hookProf?.flush(WINDOW_MS); // diagnostic mode only: synchronous hook time per package
+      if (ht?.suspended) rec.emit("rec.profiling", { state: "suspended", reason: ht.suspended, overheadMs: ht.overheadMs, ...hookProf.status() }, { sev: "notice" });
       rec.emit("perf.window", {
         windowMs: WINDOW_MS, frames: frames.length, fps: sum ? round((frames.length * 1000) / sum) : null,
         p50: round(pct(sorted, 50)), p95: round(pct(sorted, 95)), p99: round(pct(sorted, 99)), max: round(sorted.at(-1)),
@@ -73,6 +75,7 @@ export function installPerf(rec) {
         loaf: { n: loaf.n, ms: Math.round(loaf.ms), blocking: Math.round(loaf.blocking), topOrigins: Object.fromEntries(topOrigins) },
         heapMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
         hiddenMs: Math.round(hiddenMs),
+        hookTime: ht ? ht.top : undefined, hookOverheadMs: ht ? ht.overheadMs : undefined,
         latencyMs: game.time?.averageLatency ?? null, // Foundry's one-way estimate from its periodic time sync
         hooks: Object.fromEntries(Object.entries(hookCounts).filter(([, v]) => v)),
         canvas: globalThis.canvas?.ready ? { fpsTarget: canvas.app?.ticker?.maxFPS ?? null, tokens: canvas.tokens?.placeables?.length ?? null, zoom: round(canvas.stage?.scale?.x) } : null,

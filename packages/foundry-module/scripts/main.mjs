@@ -5,11 +5,12 @@ import { installPerf } from "./perf.mjs";
 import { emitEnvironment } from "./env.mjs";
 import { installAdapters } from "./adapters/index.mjs";
 import { FoundryStore, FOUNDRY_ENDPOINT } from "./store.mjs";
+import { installHookProfiler } from "./hooks.mjs";
 import { pseudo, state, combatCtx } from "./util.mjs";
 
 const MOD = "foundry-flight-recorder";
 const get = (k) => game.settings.get(MOD, k);
-let rec, store, perfSupports = {}, adapters = [], applying = Promise.resolve(), badge = null, askedFor = null;
+let rec, store, hookProf, perfSupports = {}, adapters = [], applying = Promise.resolve(), badge = null, askedFor = null;
 
 const FRICTION = ["confusing", "difficult", "broken", "slow", "rules", "other"];
 const L = (k, data) => (data ? game.i18n.format(`FFR.${k}`, data) : game.i18n.localize(`FFR.${k}`));
@@ -39,6 +40,7 @@ async function apply() {
   state.includeNames = get("includeNames");
   if (!enabled || !session?.id || !endpoint) {
     if (rec.state === "active") rec.emit("rec.stop", { reason: enabled ? "no-session" : "disabled" });
+    hookProf.setTiming(false);
     await rec.close(); // flush; undeliverable events are persisted for the next activation
     return renderBadge();
   }
@@ -49,7 +51,7 @@ async function apply() {
     if (participation) await game.settings.set(MOD, "participation", participation); // re-enters apply via onChange
     return renderBadge();
   }
-  if (participation !== "yes") { rec.disable(); try { localStorage.removeItem(`ffr.pending.${game.world.id}`); } catch {} return renderBadge(); } // opt-out: drop everything
+  if (participation !== "yes") { hookProf.setTiming(false); rec.disable(); try { localStorage.removeItem(`ffr.pending.${game.world.id}`); } catch {} return renderBadge(); } // opt-out: drop everything
 
   const fresh = rec.state !== "active" || rec.ident.sessionId !== session.id;
   if (rec.state === "active" && rec.ident.sessionId !== session.id) await rec.flush();
@@ -64,6 +66,7 @@ async function apply() {
     rec.restore().catch(() => {});
     ui.notifications.info(L("Started"));
   }
+  hookProf.setTiming(get("mode") === "diagnostic"); // per-listener timing: GM-chosen diagnostic sessions only
   renderBadge();
 }
 
@@ -183,6 +186,11 @@ rec = new Recorder({
   context: () => ({ scene: globalThis.canvas?.scene?.id, combat: combatCtx() }),
 });
 installEarly(rec);
+// Before other packages register their init-time listeners: tags them with their package (hooks.mjs).
+hookProf = installHookProfiler({
+  Hooks, ownId: MOD,
+  onVeto: (v) => rec.emit("hook.veto", v, { sev: "notice", local: true }),
+});
 
 Hooks.once("init", () => {
   registerSettings();
@@ -205,7 +213,7 @@ Hooks.once("ready", async () => {
     localStorage.removeItem(`${MOD}.participation`);
   } catch { /* nothing to migrate */ }
   game.socket.on(`module.${MOD}`, (msg, from) => store.handle(msg, from));
-  perfSupports = installPerf(rec);
+  perfSupports = installPerf(rec, hookProf);
   for (const a of adapters) rec.emit("rec.adapter", a, { sev: a.ok ? "info" : "warn" });
   schedule();
 });
