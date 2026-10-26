@@ -22,7 +22,9 @@ cp .env.example .env        # FFR_INGEST_KEY=$(openssl rand -hex 24), FFR_ALLOWE
 docker compose -f docker/compose.yml --env-file .env up -d --build
 #    or: FFR_INGEST_KEY=... FFR_ALLOWED_ORIGINS=http://localhost:30000 npm run collector
 
-# 2. module
+# 2. module: in Foundry, Install Module → Manifest URL
+#    https://github.com/Hugo-Grellier/foundry-flight-recorder/releases/latest/download/module.json
+#    or build it yourself:
 npm run build               # dist/foundry-flight-recorder(.zip)
 node scripts/build-module.mjs --install /path/to/FoundryData/Data/modules   # then restart Foundry
 ```
@@ -59,6 +61,9 @@ Try it without Foundry: `npm run -s fixtures -- --db /tmp/fx.db` generates two s
 | [docs/adapters.md](docs/adapters.md) | adding system/module adapters |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | common problems |
 | [docs/validation.md](docs/validation.md) | tests, real runtime validation, overhead measurements |
+
+Releasing: publish a GitHub release tagged `vX.Y.Z`; `.github/workflows/release.yml` runs the tests and attaches
+`module.json` + `module.zip` stamped with that version.
 
 ## Development
 
