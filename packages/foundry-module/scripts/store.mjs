@@ -4,16 +4,24 @@
 // records with or without a GM online; any other client relays its batches to the active GM over the
 // module socket (recipients: that GM only) and retries until a GM acknowledges the write.
 // Foundry specifics are injected so this file is unit-tested under Node.
+import { validateBatch, LIMITS } from "./schema.mjs";
 
 export const STORAGE_ROOT = "modules/foundry-flight-recorder/storage";
 export const FOUNDRY_ENDPOINT = "foundry:"; // Recorder endpoint value selecting this transport
 
-const safe = (s) => String(s ?? "_").replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 80) || "_";
+// No dots: a path segment can never be "." or ".." (relayed batches are written by the GM).
+const safe = (s) => String(s ?? "_").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80) || "_";
 
-/** File location of a batch. Non-media files cannot be overwritten, so the name is unique per batch. */
+/**
+ * File location of a batch: one folder per participant, so a relayed batch can only ever land in its
+ * sender's folder. Non-media files cannot be overwritten, so the name is unique per batch.
+ */
 export function batchPath(env) {
-  const seq = String(env.events?.[0]?.seq ?? 0).padStart(8, "0");
-  return { dir: `${STORAGE_ROOT}/${safe(env.world)}/${safe(env.sessionId)}`, name: `${safe(env.clientId)}-${seq}.json` };
+  const seq = env.events?.[0]?.seq;
+  return {
+    dir: `${STORAGE_ROOT}/${safe(env.world)}/${safe(env.sessionId)}/${safe(env.user)}`,
+    name: `${safe(env.clientId)}-${String(Number.isInteger(seq) && seq >= 0 ? seq : 0).padStart(8, "0")}.json`,
+  };
 }
 
 export class FoundryStore {
@@ -31,6 +39,7 @@ export class FoundryStore {
     this.o = { timeoutMs: 15000, ...o };
     this.dirs = new Set();
     this.pending = new Map();
+    this.relayBudget = new Map(); // sender -> {tokens, at}: a player cannot make the GM write files without bound
   }
 
   /** Recorder `fetch` replacement. */
@@ -70,12 +79,22 @@ export class FoundryStore {
   async handle(msg, from) {
     if (msg?.t === "ack") return this.pending.get(msg.id)?.({ ok: !!msg.ok, status: msg.status ?? 0 });
     if (msg?.t !== "batch" || !this.o.isRelay()) return;
+    const now = Date.now();
+    const b = this.relayBudget.get(from) ?? { tokens: 30, at: now };
+    b.tokens = Math.min(30, b.tokens + (now - b.at) / 1000); b.at = now; // 1 batch/s, burst 30
+    this.relayBudget.set(from, b);
     let res;
-    try {
+    if (b.tokens < 1) res = { ok: false, status: 429 };
+    else try {
+      b.tokens--;
+      if (typeof msg.body !== "string" || msg.body.length > LIMITS.batchBytes) throw new Error("size");
       const env = JSON.parse(msg.body);
-      if (!Array.isArray(env?.events) || typeof env.sessionId !== "string") throw new Error("bad batch");
-      env.user = this.o.pseudo(from);
-      res = await this.write(env);
+      if (env && typeof env === "object") env.user = this.o.pseudo(from); // identity = authenticated socket sender
+      const v = validateBatch(env);
+      if (!v.ok) throw new Error("schema");
+      // event ids must belong to the batch's client (ids are the dedup key on import)
+      const events = v.batch.events.filter((e) => e.id === `${v.batch.clientId}.${e.seq}`);
+      res = events.length ? await this.write({ ...v.batch, events }) : { ok: true, status: 200 };
     } catch { res = { ok: false, status: 400 }; }
     this.o.emit({ t: "ack", id: msg.id, ...res }, [from]);
   }

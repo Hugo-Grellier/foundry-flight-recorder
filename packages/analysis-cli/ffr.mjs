@@ -150,7 +150,13 @@ try {
       for (const { f, mtime } of files) {
         let v;
         try { const body = JSON.parse(fs.readFileSync(f, "utf8")); delete body.key; v = validateBatch(body); } catch (e) { v = { ok: false, errors: [e.message] }; }
+        if (v.ok && path.basename(path.dirname(f)) !== v.batch.user) v = { ok: false, errors: [`user ${v.batch.user} is not this participant's folder`] };
+        const owner = v.ok && db.prepare("SELECT user FROM clients WHERE session_id = ? AND client_id = ?").get(v.batch.sessionId, v.batch.clientId);
+        if (owner && owner.user !== v.batch.user) v = { ok: false, errors: [`client ${v.batch.clientId} belongs to another participant`] };
         if (!v.ok) { r.invalidFiles.push(`${f}: ${String(v.errors[0]).slice(0, 120)}`); continue; }
+        const foreign = v.batch.events.filter((e) => e.id !== `${v.batch.clientId}.${e.seq}`);
+        v.batch.events = v.batch.events.filter((e) => !foreign.includes(e));
+        r.rejectedEvents += foreign.length;
         // The file's mtime is the Foundry server's write time: it stands in for the collector's receive time (clock skew).
         const x = store.ingest(v.batch, { recv: mtime, rejected: v.rejected.length });
         r.accepted += x.accepted; r.duplicates += x.duplicates; r.rejectedEvents += v.rejected.length;

@@ -5,7 +5,7 @@
 Install the module (manifest URL
 `https://github.com/Hugo-Grellier/foundry-flight-recorder/releases/latest/download/module.json`), enable it,
 tick *Enable* and leave *Collector ingest URL* empty. Recordings are written as JSON files on the Foundry
-server, in `Data/modules/foundry-flight-recorder/storage/<world>/<session>/` (module persistent storage:
+server, in `Data/modules/foundry-flight-recorder/storage/<world>/<session>/<participant>/` (module persistent storage:
 kept across module updates).
 
 - Players with the *Upload Files* permission write their own files: they keep recording while no GM is

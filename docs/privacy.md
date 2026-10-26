@@ -38,7 +38,7 @@ field's `name` attribute and kind. Friction notes are the only free text and are
 
 ### Default storage: files on the Foundry server
 
-- Batches are JSON files under `Data/modules/foundry-flight-recorder/storage/<world>/<session>/`.
+- Batches are JSON files under `Data/modules/foundry-flight-recorder/storage/<world>/<session>/<participant>/`.
   **Foundry serves `Data/` over HTTP without login.** Outsiders cannot list folders, and file names carry
   a random 10-character client id, so they cannot guess them. But users with the Foundry permission
   *Browse File Explorer* (Trusted players and above by default) can browse that folder and read every
@@ -46,7 +46,10 @@ field's `name` attribute and kind. Friction notes are the only free text and are
   Assistants/GM, or use the collector.
 - Players without *Upload Files* send their batches to the active GM only (module socket with
   `recipients`, other players receive nothing). The GM's client writes them and stamps the sender's
-  pseudonym from the authenticated socket sender, so a player cannot write as someone else.
+  pseudonym from the authenticated socket sender, so a player cannot write as someone else. The GM
+  validates relayed batches (schema, size, event ids bound to the batch's client, 1 batch/s per sender) and
+  writes them only into the sender's own folder. `ffr import` refuses a file whose participant does not
+  match its folder or that reuses another participant's client id.
 - Players with *Upload Files* write their own files. That permission is global in Foundry (any file,
   anywhere in `Data/`): grant it for trust reasons, not for this module.
 - Deletion: delete the session folder (file browser or shell). There is no automatic retention for files.
