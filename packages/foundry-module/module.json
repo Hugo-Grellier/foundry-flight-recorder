@@ -2,7 +2,7 @@
   "id": "foundry-flight-recorder",
   "title": "Flight Recorder (session telemetry)",
   "description": "Passive, consent-based session telemetry (errors, UI interactions, PF2e semantics, performance) stored on the Foundry server for post-session analysis.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "authors": [
     {
       "name": "Hugo Grellier"
