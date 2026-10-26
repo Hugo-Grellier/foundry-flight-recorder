@@ -40,3 +40,11 @@ See docs/architecture.md (ADR log).
   (`Response.json.then`); PF2e/workbench "must target" error notification captured.
 - Bug: an escalation triggered while pending (load-time freeze) survived `disable()`, so every session event was
   tagged `diagnostic` with no `rec.mode` explaining it. Fixed (disable resets escalation) + regression test.
+
+## 2026-10-26 — public repo + collector-less storage (v0.2.0, unreleased)
+- Public repo github.com/Hugo-Grellier/foundry-flight-recorder (MIT), release workflow from the League template.
+- Consent per account (user-scoped setting); hook errors attributed via libWrapper's `[Detected packages]` note.
+- Default storage = files in the module's persistent storage on the Foundry server (store.mjs, `ffr import`).
+  Verified against the V14 server code (upload rules, socket recipients, static serving of Data/); unit and
+  import tests pass. Pending: one real-runtime check of the Foundry glue (upload, createDirectory, socket relay)
+  before tagging v0.2.0.
