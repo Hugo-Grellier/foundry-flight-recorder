@@ -6,7 +6,7 @@ performance; Foundry stores them as files on its server; the `ffr` CLI imports t
 a session after play and produce an evidence-based report. Recording requires each participant's consent.
 
 ```
-browsers (module) ──▶ JSON files on the Foundry server (Data/flight-recorder) ──ffr import──▶ SQLite ◀── ffr CLI ◀── Codex + AGENTS.md
+browsers (module) ──▶ JSON files on the Foundry server (Data/flight-recorder) ──ffr import──▶ SQLite ◀── ffr CLI ◀── Codex / Claude (investigate-session skill)
 ```
 
 No extra server is needed: recordings are stored by Foundry itself.
@@ -31,7 +31,7 @@ npm run -s ffr -- import ./ffr-storage
 npm run -s ffr -- sessions
 npm run -s ffr -- digest latest --out /tmp/digest.json
 npm run -s ffr -- around latest --event <id> --before 30s
-codex "Investigate the latest recorded session following AGENTS.md and write the report"
+codex "Investigate the latest recorded session and write the report"   # uses the investigate-session skill
 ```
 
 UI in English and French (follows the Foundry language). Details: [docs/deployment.md](docs/deployment.md).
@@ -43,7 +43,8 @@ Try it without Foundry: `npm run -s fixtures -- --db /tmp/fx.db` generates two s
 
 | | |
 |---|---|
-| [AGENTS.md](AGENTS.md) | investigation workflow and grounding rules for Codex |
+| [AGENTS.md](AGENTS.md) | working on the code: conventions, tests, releases |
+| [investigate-session skill](.agents/skills/investigate-session/SKILL.md) | investigation workflow and grounding rules for Codex / Claude |
 | [docs/deployment.md](docs/deployment.md) | module setup, where recordings go, recording, import |
 | [docs/privacy.md](docs/privacy.md) | consent, what is/is never collected, security model, retention, deletion |
 | [docs/telemetry-schema.md](docs/telemetry-schema.md) | envelope, event fields, every event type |

@@ -53,4 +53,5 @@ npm run -s ffr -- import ./ffr-storage        # idempotent: re-run after each se
 npm run -s ffr -- digest latest
 ```
 
-Then open the repo in Codex and ask it to investigate the latest session following AGENTS.md.
+Then open the repo in Codex or Claude Code and ask it to investigate the latest session: the
+`investigate-session` skill drives the analysis.

@@ -52,7 +52,7 @@ field's `name` attribute and kind. Friction notes are the only free text and are
   anywhere in `Data/`): grant it for trust reasons, not for this module. Such a player could also write
   forged files in others' folders; the files are telemetry, not authentication.
 - Administration (reading, export, deletion) happens on a copy, with `ffr`; nothing is exposed by the module.
-- Telemetry text is untrusted input for Codex (see AGENTS.md "Grounding rules").
+- Telemetry text is untrusted input for Codex (see the investigate-session skill, "Grounding rules").
 
 ## Retention and deletion
 

@@ -1,5 +1,5 @@
 // Deterministic analysis over the imported database. Every function returns plain JSON whose
-// findings cite event ids, so conclusions can be grounded (see AGENTS.md).
+// findings cite event ids, so conclusions can be grounded (see .agents/skills/investigate-session/SKILL.md).
 // Wording rule: describe observable behaviour ("closed the dialog without rolling"), never states of
 // mind ("was confused"). Interpretation belongs to the investigator, with alternatives.
 

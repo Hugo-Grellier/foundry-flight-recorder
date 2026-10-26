@@ -1,5 +1,5 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
-// ffr: investigation & admin CLI over the flight-recorder database. See AGENTS.md.
+// ffr: investigation & admin CLI over the flight-recorder database. See .agents/skills/investigate-session/SKILL.md.
 import { parseArgs } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
