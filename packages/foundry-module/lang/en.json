@@ -7,7 +7,7 @@
       "mode": { "name": "Collection mode", "hint": "normal: low overhead. detailed: generic clicks, focus, warnings, layer changes. diagnostic: everything (also auto-enabled for 60 s after an error, freeze or friction marker)." },
       "includeNames": { "name": "Record entity names", "hint": "Include actor/item/scene/window names (helps analysis). Off: ids and types only." },
       "captureConsole": { "name": "Capture console errors/warnings", "hint": "Records console.error/warn messages and their origin module." },
-      "participation": { "name": "My participation in session recording", "hint": "Ask: prompt when a recording starts. Yes/No: your choice for this world. You can change it at any time." }
+      "participation": { "name": "My participation in session recording", "hint": "Ask: prompt when a recording starts. Yes/No: your choice for this world, kept on your account (every browser). You can change it at any time." }
     },
     "Mode": { "normal": "Normal", "detailed": "Detailed", "diagnostic": "Diagnostic" },
     "Participation": { "ask": "Ask me", "yes": "Yes, record my client", "no": "No, never record my client" },
@@ -15,7 +15,7 @@
     "Friction": { "confusing": "Confusing", "difficult": "Hard to do", "broken": "Broken / bug", "slow": "Slow / laggy", "rules": "Unsure about a rule", "other": "Other",
       "title": "Report friction", "what": "What happened?", "note": "Optional note (visible to the GM's analysis)", "mark": "Mark", "thanks": "Thanks, marked.", "notRecording": "Flight recorder is not recording your client." },
     "Consent": { "title": "Session recording", "yes": "Record my client", "no": "Do not record me",
-      "body": "<p>The GM started a <b>session recording</b>{label} to improve future sessions.</p><p>If you agree, your client sends to the GM's server: windows/tabs opened, buttons used, targets, token moves, rolls and their results, errors and performance measurements. <b>Never</b> chat text, typed text, passwords, journals, audio or screenshots. You are identified by a pseudonym. Data is used to improve the game, not to rate players.</p><p>You can change this later in <i>Configure Settings → Flight Recorder</i> or with the REC badge.</p>" },
+      "body": "<p>The GM started a <b>session recording</b>{label} to improve future sessions.</p><p>If you agree, your client sends to the GM's server: windows/tabs opened, buttons used, targets, token moves, rolls and their results, errors and performance measurements. <b>Never</b> chat text, typed text, passwords, journals, audio or screenshots. You are identified by a pseudonym. Data is used to improve the game, not to rate players.</p><p>Your choice is kept on your account: you will not be asked again. You can change it later in <i>Configure Settings → Flight Recorder</i> or with the REC badge.</p>" },
     "Started": "Flight recorder: this session is being recorded (your client opted in). Alt+Shift+F reports friction.",
     "Badge": { "rec": "● REC", "optout": "○ REC (not you)", "idle": "○ rec off",
       "recTip": "This session is recorded from your client. Click for options / report friction.", "optoutTip": "A session is being recorded, but not from your client.", "idleTip": "Flight recorder idle." },

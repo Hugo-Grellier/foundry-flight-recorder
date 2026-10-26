@@ -23,7 +23,7 @@ function registerSettings() {
   reg("includeNames", { ...S("includeNames"), scope: "world", config: true, type: Boolean, default: true });
   reg("captureConsole", { ...S("captureConsole"), scope: "world", config: true, type: Boolean, default: true });
   reg("session", { scope: "world", config: false, type: Object, default: null });
-  reg("participation", { ...S("participation"), scope: "client", config: true, type: String, choices: { ask: "FFR.Participation.ask", yes: "FFR.Participation.yes", no: "FFR.Participation.no" }, default: "ask" });
+  reg("participation", { ...S("participation"), scope: "user", config: true, type: String, choices: { ask: "FFR.Participation.ask", yes: "FFR.Participation.yes", no: "FFR.Participation.no" }, default: "ask" });
   game.keybindings.register(MOD, "friction", {
     name: "FFR.Key.friction", hint: "FFR.Key.frictionHint",
     editable: [{ key: "KeyF", modifiers: ["Alt", "Shift"] }], onDown: () => { openFriction(); return true; },
@@ -178,7 +178,13 @@ Hooks.once("init", () => {
   game.modules.get(MOD).api = { recorder: rec, start: startSession, stop: stopSession, friction: openFriction, status: () => rec.status(), mark: (cat = "other", note = null) => rec.emit("friction.mark", { cat, note, recent: rec.recent(12), api: true }, { sev: "notice", local: true }) };
 });
 
-Hooks.once("ready", () => {
+Hooks.once("ready", async () => {
+  // 0.1.0 kept the choice per browser (client scope); carry it over to the account (user scope) once.
+  try {
+    const legacy = JSON.parse(localStorage.getItem(`${MOD}.participation`) ?? "null");
+    if (["yes", "no"].includes(legacy) && get("participation") === "ask") await game.settings.set(MOD, "participation", legacy);
+    localStorage.removeItem(`${MOD}.participation`);
+  } catch { /* nothing to migrate */ }
   perfSupports = installPerf(rec);
   for (const a of adapters) rec.emit("rec.adapter", a, { sev: a.ok ? "info" : "warn" });
   schedule();

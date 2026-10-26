@@ -21,7 +21,7 @@ export async function startCollector({ db = "./data/ffr.db", port = 4319, origin
 
 /**
  * Point a client at the collector and opt it in. World settings are written by the GM page only;
- * participation is per browser (client setting). Throws if the module is not active in the world.
+ * participation is per user account (user setting, set from that user's own client). Throws if the module is not active in the world.
  */
 export async function configure(page, { endpoint, key }, { player = false, mode = "normal" } = {}) {
   return page.evaluate(async ({ MOD, endpoint, key, player, mode }) => {

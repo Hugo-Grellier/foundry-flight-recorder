@@ -6,7 +6,8 @@ friends without surprising anyone.
 ## Consent model
 
 1. Nothing is recorded unless the GM enables the recorder **and** starts a session.
-2. Each participant decides for their own browser (`Configure Settings → Flight Recorder → My participation`):
+2. Each participant decides for their own account, once (`Configure Settings → Flight Recorder → My participation`, a user-scoped setting
+   stored in the world, so it follows them across browsers):
    *Ask me* (default: a dialog appears when a recording starts), *Yes*, *No*. Declining drops every
    buffered event and sends nothing.
 3. Before consent, events are held in memory only (never sent, never written to disk) and discarded on refusal.
