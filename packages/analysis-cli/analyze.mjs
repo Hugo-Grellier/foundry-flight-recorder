@@ -242,17 +242,27 @@ export function around(db, sid, { event, time, before = 30000, after = 10000, cl
 // ---------------------------------------------------------------------------
 // Errors
 
+/**
+ * Packages named by libWrapper's "[Detected N packages: a(1.0), b(2.0)]" note, appended to the message of the
+ * errors it sees; entries keep their version ("id(version)"). It also names the package that registered a
+ * failing hook callback, which the stack (Hooks.onError, wrappers) does not show. Most likely culprit first.
+ */
+export function detectedPackages(text) {
+  const m = /\[Detected \d+ packages?: (.*)\]$/m.exec(String(text ?? ""));
+  return m ? m[1].split(", ").filter(Boolean) : [];
+}
+
 export function errors(db, sid, { module, grep, limit = 50 } = {}) {
   const t0 = sessionT0(db, sid);
   const rows = db.prepare("SELECT * FROM events WHERE session_id = ? AND (cat = 'err' OR type = 'warn.console' OR (type = 'ui.notify' AND sev IN ('warn','error'))) ORDER BY tc").all(sid).map(parseRow);
   const groups = new Map();
   for (const e of rows) {
     const d = e.data ?? {};
-    if (module && !(d.origins ?? []).some((o) => o.includes(module))) continue;
+    if (module && ![...(d.origins ?? []), ...detectedPackages(`${d.msg ?? ""}\n${d.stack ?? ""}`)].some((o) => o.includes(module))) continue;
     if (grep && !new RegExp(grep, "i").test(`${d.msg ?? ""} ${d.stack ?? ""}`)) continue;
     const key = d.fp ?? `${e.type}|${d.kind ?? ""}|${String(d.msg ?? "").slice(0, 120)}`;
     let g = groups.get(key);
-    if (!g) groups.set(key, (g = { fingerprint: key, type: e.type, sev: e.sev, msg: d.msg, throwSite: d.top ?? null, origins: d.origins ?? [], versions: d.versions ?? {}, count: 0, clients: new Set(), users: new Set(), scenes: new Set(), first: e, last: e, ids: [], stack: d.stack ? String(d.stack).split("\n").slice(0, 8).join("\n") : null, location: d.location ?? d.file ?? null }));
+    if (!g) groups.set(key, (g = { fingerprint: key, type: e.type, sev: e.sev, msg: d.msg, throwSite: d.top ?? null, detected: detectedPackages(`${d.msg ?? ""}\n${d.stack ?? ""}`), origins: d.origins ?? [], versions: d.versions ?? {}, count: 0, clients: new Set(), users: new Set(), scenes: new Set(), first: e, last: e, ids: [], stack: d.stack ? String(d.stack).split("\n").slice(0, 8).join("\n") : null, location: d.location ?? d.file ?? null }));
     g.count++; g.clients.add(e.client_id); g.users.add(e.user); if (e.scene) g.scenes.add(e.scene); g.last = e;
     if (g.ids.length < 10) g.ids.push(e.id);
   }
@@ -451,8 +461,9 @@ export function anomalies(db, sid) {
   const add = (severity, kind, summary, evidence, extra = {}) => out.push({ severity, kind, summary, evidence: evidence.slice(0, 12), ...extra });
   for (const g of errors(db, sid)) {
     if (!g.type.startsWith("err")) continue;
-    const where = g.throwSite ? `thrown in ${g.throwSite}` : `throw site not in a package${g.origins.length ? `; packages in stack: ${g.origins.join(", ")}` : ""}`;
-    add(g.count >= 5 || g.users.length > 1 ? "high" : "medium", "error", `${g.type} x${g.count} (${g.users.length} user(s)) ${where}: ${String(g.msg).slice(0, 140)}`, g.ids, { throwSite: g.throwSite, origins: g.origins, versions: g.versions });
+    const where = g.throwSite ? `thrown in ${g.throwSite}`
+      : `throw site not in a package${g.detected.length ? `; libWrapper suspects: ${g.detected.join(", ")}` : g.origins.length ? `; packages in stack: ${g.origins.join(", ")}` : ""}`;
+    add(g.count >= 5 || g.users.length > 1 ? "high" : "medium", "error", `${g.type} x${g.count} (${g.users.length} user(s)) ${where}: ${String(g.msg).slice(0, 140)}`, g.ids, { throwSite: g.throwSite, detected: g.detected, origins: g.origins, versions: g.versions });
   }
   for (const g of errors(db, sid).filter((g) => g.type === "ui.notify")) {
     add(g.count >= 3 ? "medium" : "low", "warning-notification", `UI ${g.sev} shown x${g.count}: "${String(g.msg).slice(0, 140)}"`, g.ids);

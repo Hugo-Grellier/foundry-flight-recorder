@@ -186,3 +186,11 @@ test("untrusted telemetry keys like __proto__ stay ordinary keys (no prototype p
   assert.equal({}.polluted, undefined);
   assert.equal(Object.prototype.polluted, undefined);
 });
+
+test("libWrapper's [Detected packages] note names a hook error's package that the stack does not show", () => {
+  assert.deepEqual(A.detectedPackages("x for hook 'getCombatTrackerContextOptions'. y\n[Detected 3 packages: monks-combat-details(14.03), wrap(2.5), pf2e-hud(2.57.0)]\n    at Hooks.onError (http://h/scripts/foundry.mjs:1:1)"),
+    ["monks-combat-details(14.03)", "wrap(2.5)", "pf2e-hud(2.57.0)"]);
+  assert.deepEqual(A.detectedPackages("Uncaught\n[Detected 2 packages: monks-little-details(14.01), lib-wrapper([ip])]"), ["monks-little-details(14.01)", "lib-wrapper([ip])"]);
+  assert.deepEqual(A.detectedPackages("Item does not exist!\n[No packages detected]"), []);
+  assert.deepEqual(A.detectedPackages(undefined), []);
+});
