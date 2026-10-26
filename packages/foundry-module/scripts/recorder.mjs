@@ -3,7 +3,7 @@
 // everything environment-specific is injected, so this file is unit-tested under Node.
 import { SCHEMA_VERSION, EVENT_TYPES, MODES, sanitize, LIMITS } from "./schema.mjs";
 
-export const RECORDER_VERSION = "0.1.0";
+export const RECORDER_VERSION = "0.2.0";
 
 const DEFAULTS = {
   flushMs: 5000,
@@ -84,8 +84,9 @@ export class Recorder {
   get modeLevel() { return MODES[this.effectiveMode()] ?? 0; }
   effectiveMode() { return this.now() < this.escalatedUntil ? "diagnostic" : this.mode; }
 
-  configure({ endpoint, key, mode, sessionId, user, role, world } = {}) {
+  configure({ endpoint, key, mode, sessionId, user, role, world, flushMs } = {}) {
     if (endpoint !== undefined) this.endpoint = endpoint;
+    if (flushMs !== undefined) this.o.flushMs = flushMs;
     if (key !== undefined) this.key = key;
     if (mode !== undefined && mode in MODES) { this.mode = mode; this.baseMode = mode; }
     if (sessionId !== undefined) this.ident.sessionId = sessionId;

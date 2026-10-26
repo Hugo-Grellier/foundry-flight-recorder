@@ -4,11 +4,12 @@ import { installCapture, emitSceneSummary } from "./capture.mjs";
 import { installPerf } from "./perf.mjs";
 import { emitEnvironment } from "./env.mjs";
 import { installAdapters } from "./adapters/index.mjs";
+import { FoundryStore, FOUNDRY_ENDPOINT } from "./store.mjs";
 import { pseudo, state, combatCtx } from "./util.mjs";
 
 const MOD = "foundry-flight-recorder";
 const get = (k) => game.settings.get(MOD, k);
-let rec, perfSupports = {}, adapters = [], applying = Promise.resolve(), badge = null, askedFor = null;
+let rec, store, perfSupports = {}, adapters = [], applying = Promise.resolve(), badge = null, askedFor = null;
 
 const FRICTION = ["confusing", "difficult", "broken", "slow", "rules", "other"];
 const L = (k, data) => (data ? game.i18n.format(`FFR.${k}`, data) : game.i18n.localize(`FFR.${k}`));
@@ -17,7 +18,7 @@ const S = (k) => ({ name: `FFR.Settings.${k}.name`, hint: `FFR.Settings.${k}.hin
 function registerSettings() {
   const reg = (k, o) => game.settings.register(MOD, k, { onChange: () => schedule(), ...o });
   reg("enabled", { ...S("enabled"), scope: "world", config: true, type: Boolean, default: false });
-  reg("endpoint", { ...S("endpoint"), scope: "world", config: true, type: String, default: "http://127.0.0.1:4318/v1/ingest" });
+  reg("endpoint", { ...S("endpoint"), scope: "world", config: true, type: String, default: "" }); // empty: files on the Foundry server (store.mjs)
   reg("ingestKey", { ...S("ingestKey"), scope: "world", config: true, type: String, default: "" });
   reg("mode", { ...S("mode"), scope: "world", config: true, type: String, choices: { normal: "FFR.Mode.normal", detailed: "FFR.Mode.detailed", diagnostic: "FFR.Mode.diagnostic" }, default: "normal" });
   reg("includeNames", { ...S("includeNames"), scope: "world", config: true, type: Boolean, default: true });
@@ -34,7 +35,7 @@ function schedule() { applying = applying.then(apply, apply); return applying; }
 
 async function apply() {
   if (!game.ready) return;
-  const enabled = get("enabled"), session = get("session"), endpoint = get("endpoint");
+  const enabled = get("enabled"), session = get("session"), endpoint = get("endpoint") || FOUNDRY_ENDPOINT;
   state.includeNames = get("includeNames");
   if (!enabled || !session?.id || !endpoint) {
     if (rec.state === "active") rec.emit("rec.stop", { reason: enabled ? "no-session" : "disabled" });
@@ -52,7 +53,7 @@ async function apply() {
 
   const fresh = rec.state !== "active" || rec.ident.sessionId !== session.id;
   if (rec.state === "active" && rec.ident.sessionId !== session.id) await rec.flush();
-  rec.configure({ endpoint, key: get("ingestKey"), mode: get("mode"), sessionId: session.id, user: pseudo(game.world.id, game.user.id), role: game.user.isGM ? "gm" : "player", world: game.world.id });
+  rec.configure({ endpoint, flushMs: endpoint === FOUNDRY_ENDPOINT ? 15000 : 5000, key: get("ingestKey"), mode: get("mode"), sessionId: session.id, user: pseudo(game.world.id, game.user.id), role: game.user.isGM ? "gm" : "player", world: game.world.id });
   if (fresh) {
     rec.activate();
     rec.emit("rec.start", { session: session.id, label: session.label ?? null, version: RECORDER_VERSION, adapters, reload: performance.now() < 120000 });
@@ -162,9 +163,23 @@ async function stopSession() {
 // ---------------------------------------------------------------------------
 Hooks.once("init", () => {
   registerSettings();
+  const FP = () => foundry.applications.apps.FilePicker.implementation;
+  store = new FoundryStore({
+    upload: async (dir, name, text) => {
+      const fd = new FormData(); // FilePicker.upload() would raise a UI notification on every failure
+      fd.set("source", "data"); fd.set("target", dir); fd.set("upload", new File([text], name, { type: "application/json" }));
+      return (await window.fetch(FP().uploadURL, { method: "POST", body: fd })).json();
+    },
+    mkdir: (p) => FP().createDirectory("data", p),
+    emit: (msg, recipients) => game.socket.emit(`module.${MOD}`, msg, { recipients }),
+    canUpload: () => game.user.can("FILES_UPLOAD"),
+    relayTo: () => game.users.activeGM?.id ?? null,
+    isRelay: () => get("enabled") && game.users.activeGM?.isSelf === true,
+    pseudo: (userId) => pseudo(game.world.id, userId),
+  });
   rec = new Recorder({
-    fetch: (u, i) => window.fetch(u, i),
-    beacon: (u, body) => navigator.sendBeacon?.(u, new Blob([body], { type: "text/plain" })) ?? false,
+    fetch: (u, i) => (u === FOUNDRY_ENDPOINT ? store.send(u, i) : window.fetch(u, i)),
+    beacon: (u, body) => u !== FOUNDRY_ENDPOINT && (navigator.sendBeacon?.(u, new Blob([body], { type: "text/plain" })) ?? false),
     storage: window.localStorage, storageKey: `ffr.pending.${game.world?.id ?? "world"}`,
     context: () => ({ scene: globalThis.canvas?.scene?.id, combat: combatCtx() }),
   });
@@ -185,6 +200,7 @@ Hooks.once("ready", async () => {
     if (["yes", "no"].includes(legacy) && get("participation") === "ask") await game.settings.set(MOD, "participation", legacy);
     localStorage.removeItem(`${MOD}.participation`);
   } catch { /* nothing to migrate */ }
+  game.socket.on(`module.${MOD}`, (msg, from) => store.handle(msg, from));
   perfSupports = installPerf(rec);
   for (const a of adapters) rec.emit("rec.adapter", a, { sev: a.ok ? "info" : "warn" });
   schedule();

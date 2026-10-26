@@ -53,6 +53,14 @@
     capture-phase passive DOM listeners, MutationObserver on `#notifications`, PerformanceObserver.
     The only wrapper is `console.error/warn` (calls the original first; can be disabled by setting).
 11. **No dashboard.** The analyst is Codex with a CLI; humans read the generated report.
+13. **Collector-less default storage** (module persistent storage on the Foundry server). Modules run no
+    server code, so the only server writes available are Foundry's own upload endpoint (permission
+    *Upload Files*, global) and world documents (would bloat the world database and broadcast changes).
+    Clients that may upload write their own batch files, one per batch (non-media files cannot be
+    overwritten: "already exists" on retry means stored); others relay over the module socket to the active
+    GM only, who writes and acks. *Why:* installing Docker and a reverse proxy kills adoption.
+    *Trade-off:* Foundry serves `Data/` publicly (unguessable names, but browsable with *Browse File
+    Explorer*); recording of non-uploading players needs a GM online; no retention. The collector stays.
 12. **Text/plain JSON POST** avoids CORS preflight; `sendBeacon` + localStorage persistence on `pagehide`.
 
 ## Foundry V14 / PF2e integration points (verified)

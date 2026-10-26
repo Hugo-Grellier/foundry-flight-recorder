@@ -6,44 +6,37 @@ performance; a self-hosted collector stores them in SQLite; the `ffr` CLI lets *
 a session after play and produce an evidence-based report. Recording requires each participant's consent.
 
 ```
-browsers (module) ──POST /v1/ingest──▶ collector (SQLite) ◀── ffr CLI ◀── Codex + AGENTS.md
+browsers (module) ──▶ JSON files on the Foundry server ──ffr import──▶ SQLite ◀── ffr CLI ◀── Codex + AGENTS.md
+                   └──▶ optional self-hosted collector (Docker) ─────────────▶┘
 ```
 
-Status: v0.1.0. Unit/synthetic tests and a real Foundry 14.369 + PF2e 8.6.1 run pass (see
-[docs/validation.md](docs/validation.md)). Not yet used in a real session with human players.
+No extra server is needed: recordings are stored by Foundry itself. A collector is optional.
+
+Status: v0.1.0 released, v0.2.0 in progress. Unit/synthetic tests and real Foundry 14.369 + PF2e 8.6.1 runs
+(see [docs/validation.md](docs/validation.md)); first real sessions with players in progress.
 
 ## Quick start
 
-Requirements: Node ≥ 22.13 (no npm dependencies) or Docker; Foundry V14.
+1. In Foundry: *Install Module* → Manifest URL
+   `https://github.com/Hugo-Grellier/foundry-flight-recorder/releases/latest/download/module.json`
+2. In the world: enable *Flight Recorder*, then *Configure Settings* → **Enable**. Leave *Collector ingest URL*
+   empty: recordings go to `Data/modules/foundry-flight-recorder/storage/` on the Foundry server.
+3. Record: GM clicks the badge at the top of the screen → *Start session*. Players accept the consent dialog
+   (asked once per account). Anyone: **Alt+Shift+F** marks a friction moment. GM → *Stop session*.
+4. Investigate (Node ≥ 22.13, no npm dependencies) on a copy of that folder:
 
 ```bash
-# 1. collector
-cp .env.example .env        # FFR_INGEST_KEY=$(openssl rand -hex 24), FFR_ALLOWED_ORIGINS=<your Foundry origin>
-docker compose -f docker/compose.yml --env-file .env up -d --build
-#    or: FFR_INGEST_KEY=... FFR_ALLOWED_ORIGINS=http://localhost:30000 npm run collector
-
-# 2. module: in Foundry, Install Module → Manifest URL
-#    https://github.com/Hugo-Grellier/foundry-flight-recorder/releases/latest/download/module.json
-#    or build it yourself:
-npm run build               # dist/foundry-flight-recorder(.zip)
-node scripts/build-module.mjs --install /path/to/FoundryData/Data/modules   # then restart Foundry
-```
-
-UI in English and French (follows the Foundry language). In the world: enable *Flight Recorder* → *Configure Settings*: **Enable**, **Collector ingest URL**
-(`http://<host>:4318/v1/ingest`, HTTPS behind a proxy if Foundry is HTTPS), **ingest key**.
-
-Record: GM clicks the badge at the top of the screen → *Start session*. Players accept the consent dialog.
-Anyone: **Alt+Shift+F** marks a friction moment. GM → *Stop session* at the end.
-
-Investigate:
-
-```bash
+rsync -a foundry:/path/to/Data/modules/foundry-flight-recorder/storage/ ./ffr-storage/
 export FFR_DB=./data/ffr.db
+npm run -s ffr -- import ./ffr-storage
 npm run -s ffr -- sessions
 npm run -s ffr -- digest latest --out /tmp/digest.json
 npm run -s ffr -- around latest --event <id> --before 30s
 codex "Investigate the latest recorded session following AGENTS.md and write the report"
 ```
+
+UI in English and French (follows the Foundry language). Optional self-hosted collector (Docker, central
+database, retention, stricter privacy) and HTTPS setup: [docs/deployment.md](docs/deployment.md).
 
 Try it without Foundry: `npm run -s fixtures -- --db /tmp/fx.db` generates two synthetic PF2e sessions
 (targeting struggle, injected module error, freeze, disconnect, config change between sessions).

@@ -1,6 +1,31 @@
 # Deployment
 
-## 1. Collector
+## 0. Default: no collector
+
+Install the module (manifest URL
+`https://github.com/Hugo-Grellier/foundry-flight-recorder/releases/latest/download/module.json`), enable it,
+tick *Enable* and leave *Collector ingest URL* empty. Recordings are written as JSON files on the Foundry
+server, in `Data/modules/foundry-flight-recorder/storage/<world>/<session>/` (module persistent storage:
+kept across module updates).
+
+- Players with the *Upload Files* permission write their own files: they keep recording while no GM is
+  connected (as long as a session is started).
+- Other players send to the connected GM, who writes for them. Without a GM online their events wait in
+  memory (bounded queue) and in the browser's storage at page close, and are sent when a GM connects.
+- One file per batch (every 15 s, sooner after an error/freeze/friction).
+
+Analysis: copy the folder to your machine keeping modification times (they are the server's receive times,
+used to correct client clock skew), then import it:
+
+```bash
+rsync -a foundry:/path/to/Data/modules/foundry-flight-recorder/storage/ ./ffr-storage/
+npm run -s ffr -- import ./ffr-storage --db ./data/ffr.db    # idempotent: re-import after each session
+```
+
+Privacy trade-offs of this mode: [privacy.md](privacy.md#default-storage-files-on-the-foundry-server).
+Use the collector (below) for a central database, retention and stricter privacy.
+
+## 1. Collector (optional)
 
 ```bash
 cp .env.example .env            # set FFR_INGEST_KEY (openssl rand -hex 24) and FFR_ALLOWED_ORIGINS
@@ -55,7 +80,8 @@ node scripts/build-module.mjs --install /path/to/FoundryData/Data/modules
 ```
 
 Restart Foundry (new packages are discovered at startup), enable *Flight Recorder* in the world, then in
-*Configure Settings → Flight Recorder*: enable, collector URL, ingest key, mode, entity names.
+*Configure Settings → Flight Recorder*: enable, collector URL (empty = files on the Foundry server),
+ingest key (collector only), mode, entity names.
 
 ## 4. Recording a session
 

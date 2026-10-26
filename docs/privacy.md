@@ -36,12 +36,30 @@ field's `name` attribute and kind. Friction notes are the only free text and are
 
 ## Security
 
+### Default storage: files on the Foundry server
+
+- Batches are JSON files under `Data/modules/foundry-flight-recorder/storage/<world>/<session>/`.
+  **Foundry serves `Data/` over HTTP without login.** Outsiders cannot list folders, and file names carry
+  a random 10-character client id, so they cannot guess them. But users with the Foundry permission
+  *Browse File Explorer* (Trusted players and above by default) can browse that folder and read every
+  participant's (pseudonymous) telemetry. For a table where that matters, restrict *Browse File Explorer* to
+  Assistants/GM, or use the collector.
+- Players without *Upload Files* send their batches to the active GM only (module socket with
+  `recipients`, other players receive nothing). The GM's client writes them and stamps the sender's
+  pseudonym from the authenticated socket sender, so a player cannot write as someone else.
+- Players with *Upload Files* write their own files. That permission is global in Foundry (any file,
+  anywhere in `Data/`): grant it for trust reasons, not for this module.
+- Deletion: delete the session folder (file browser or shell). There is no automatic retention for files.
+
+### Collector (optional)
+
 - The ingest key is visible to every connected browser (it is a world setting). It can only append events.
   There is no HTTP endpoint to read, export, delete or configure anything.
 - Administration = shell access to the collector host: `ffr` (or `docker compose exec collector node packages/analysis-cli/ffr.mjs`).
 - Collector controls: exact Origin allowlist, key check (constant time), 512 KiB body limit, 500 events per
   batch, per-IP request rate, per-client event rate, storage cap (HTTP 507), strict schema validation.
 - Store the database outside Foundry's `Data` directory (Foundry serves `Data` publicly).
+- The collector gives stricter privacy than file storage: nothing is readable from Foundry.
 - Client-supplied events are untrusted: the user pseudonym and role are claims, not authentication.
   Anyone holding the ingest key can append garbage to a session; they cannot read anything.
 - Telemetry text is untrusted input for Codex (see AGENTS.md "Grounding rules").

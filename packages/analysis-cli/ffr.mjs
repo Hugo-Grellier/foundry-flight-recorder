@@ -3,7 +3,8 @@
 import { parseArgs } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
-import { openDb, finalizeSession, deleteSession, deleteUser, applyRetention } from "../collector/db.mjs";
+import { openDb, Store, finalizeSession, deleteSession, deleteUser, applyRetention } from "../collector/db.mjs";
+import { validateBatch } from "../schema/schema.mjs";
 import * as A from "./analyze.mjs";
 
 const HELP = `ffr — Foundry Flight Recorder analysis CLI
@@ -34,6 +35,8 @@ Investigation (read-only):
   sql "<select ...>"            read-only SQL (tables: sessions, clients, batches, events)
 
 Administration (local only, modifies data):
+  import <dir|file...>          load batch files stored on the Foundry server (module storage, no collector)
+                                into the database (created if missing); idempotent (events dedup by id)
   finalize <s>                  mark a session ended
   delete <s> --yes              delete a session and all its events
   delete-user <pseudo> --yes    delete all events of one participant
@@ -55,8 +58,8 @@ const { values: o, positionals: pos } = parseArgs({
 const [cmd, ...args] = pos;
 if (!cmd || o.help) { console.log(HELP); process.exit(0); }
 const dbFile = o.db ?? process.env.FFR_DB ?? "./data/ffr.db";
-const ADMIN = new Set(["finalize", "delete", "delete-user", "retention"]);
-if (!fs.existsSync(dbFile)) fail(`database not found: ${dbFile} (set --db or FFR_DB)`);
+const ADMIN = new Set(["import", "finalize", "delete", "delete-user", "retention"]);
+if (!fs.existsSync(dbFile) && cmd !== "import") fail(`database not found: ${dbFile} (set --db or FFR_DB)`);
 const db = openDb(dbFile, { readonly: !ADMIN.has(cmd) });
 
 function fail(msg) { console.error(`ffr: ${msg}`); process.exit(2); }
@@ -136,6 +139,23 @@ try {
       if (!/^\s*(select|with)\b/i.test(args[0] ?? "")) fail("only SELECT statements are allowed");
       print(db.prepare(args[0]).all()); // the database is opened read-only for this command
       break;
+    }
+    case "import": {
+      if (!args.length) fail("import needs a directory or file (e.g. a copy of Data/modules/foundry-flight-recorder/storage)");
+      const files = args.flatMap((a) => (fs.statSync(a).isDirectory() ? fs.readdirSync(a, { recursive: true }).map((f) => path.join(a, f)) : [a]))
+        .filter((f) => f.endsWith(".json") && fs.statSync(f).isFile())
+        .map((f) => ({ f, mtime: fs.statSync(f).mtimeMs })).sort((a, b) => a.mtime - b.mtime);
+      const store = new Store(db);
+      const r = { files: files.length, accepted: 0, duplicates: 0, rejectedEvents: 0, invalidFiles: [] };
+      for (const { f, mtime } of files) {
+        let v;
+        try { const body = JSON.parse(fs.readFileSync(f, "utf8")); delete body.key; v = validateBatch(body); } catch (e) { v = { ok: false, errors: [e.message] }; }
+        if (!v.ok) { r.invalidFiles.push(`${f}: ${String(v.errors[0]).slice(0, 120)}`); continue; }
+        // The file's mtime is the Foundry server's write time: it stands in for the collector's receive time (clock skew).
+        const x = store.ingest(v.batch, { recv: mtime, rejected: v.rejected.length });
+        r.accepted += x.accepted; r.duplicates += x.duplicates; r.rejectedEvents += v.rejected.length;
+      }
+      print(r); break;
     }
     case "finalize": print({ finalized: finalizeSession(db, sess(args[0])) }); break;
     case "delete": { const s = sess(args[0]); needYes(`delete session ${s}`); print({ deleted: deleteSession(db, s) }); break; }

@@ -5,8 +5,9 @@ questions about them. Your job after a session: explain, with evidence, what wen
 where participants hit friction, and what the GM should change before next session.
 
 Run the CLI as `npm run -s ffr -- <command> ...` or `node packages/analysis-cli/ffr.mjs <command> ...`.
-Point it at the data with `--db <file>` or `FFR_DB` (production default: the collector volume, e.g.
-`./data/ffr.db`; try `npm run -s fixtures -- --db /tmp/fx.db` for a synthetic two-session dataset).
+Point it at the data with `--db <file>` or `FFR_DB` (the collector volume, e.g. `./data/ffr.db`, or a database
+built with `ffr import <copy of Data/modules/foundry-flight-recorder/storage>` when no collector is used;
+try `npm run -s fixtures -- --db /tmp/fx.db` for a synthetic two-session dataset).
 `ffr --help` lists every command and filter. Add `--json` when you parse output.
 
 ## Investigation steps
