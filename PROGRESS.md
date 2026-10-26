@@ -34,3 +34,9 @@ See docs/architecture.md (ADR log).
 5. P2: per-sheet semantic maps (PF2e strike/spell buttons), statistical anomaly baselines, multi-session trends,
    libWrapper-level attribution.
 6. Localization (module UI strings are English only).
+
+## 2026-10-26 — first prod session (pf2e-beginner-box, GM only, ~35 s, local collector)
+- 69 events, 0 rejected, 0 sequence gaps, clean stop. Found: 4.7 s freeze attributed by LoAF to `babele`
+  (`Response.json.then`); PF2e/workbench "must target" error notification captured.
+- Bug: an escalation triggered while pending (load-time freeze) survived `disable()`, so every session event was
+  tagged `diagnostic` with no `rec.mode` explaining it. Fixed (disable resets escalation) + regression test.

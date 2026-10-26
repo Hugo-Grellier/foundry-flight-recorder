@@ -109,6 +109,7 @@ export class Recorder {
   disable() {
     this.state = "off";
     this.queue = []; this.ring = []; this.spans.clear();
+    this.escalatedUntil = 0; this.lastEscalation = -Infinity; // its rec.mode was just dropped: do not leak the escalation
     if (this.seq > 0) { this.clientId = `c${rid(10)}`; this.seq = 0; this.batchSeq = 0; }
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;

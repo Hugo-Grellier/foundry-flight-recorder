@@ -253,3 +253,18 @@ test("a hung send is aborted by the fetch timeout and retried (no permanently st
   assert.equal(h.rec.queue.length, 0);
   assert.equal(calls, 2);
 });
+
+test("an escalation triggered before disable() does not leak into the next session", async () => {
+  const h = harness({ mode: "normal" });
+  h.rec.emit("perf.stall", { ms: 4000 });          // load-time freeze while pending -> escalates
+  assert.equal(h.rec.effectiveMode(), "diagnostic");
+  h.rec.disable();                                   // recorder not enabled: rec.mode dropped with the queue
+  h.rec.configure({ sessionId: "s2" });
+  h.rec.activate();
+  h.rec.emit("ui.tab", {}, { lvl: 0 });
+  h.rec.emit("perf.stall", { ms: 4000 });          // a real in-session freeze must escalate and say so
+  await h.advance(2000);
+  const ev = h.sent.flatMap((b) => b.events);
+  assert.equal(ev.find((e) => e.type === "ui.tab").mode, "normal");
+  assert.ok(ev.some((e) => e.type === "rec.mode"));
+});
