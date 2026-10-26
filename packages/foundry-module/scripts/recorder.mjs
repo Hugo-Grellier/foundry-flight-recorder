@@ -3,7 +3,7 @@
 // everything environment-specific is injected, so this file is unit-tested under Node.
 import { SCHEMA_VERSION, EVENT_TYPES, MODES, sanitize, LIMITS } from "./schema.mjs";
 
-export const RECORDER_VERSION = "0.2.0";
+export const RECORDER_VERSION = "0.2.1";
 
 const DEFAULTS = {
   flushMs: 5000,

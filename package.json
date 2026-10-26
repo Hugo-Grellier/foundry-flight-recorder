@@ -1,6 +1,6 @@
 {
   "name": "foundry-flight-recorder",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Session flight recorder for Foundry VTT V14 (PF2e): passive client telemetry, self-hosted collector, Codex analysis CLI",
   "type": "module",
