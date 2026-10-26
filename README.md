@@ -7,7 +7,7 @@ a session after play and produce an evidence-based report. Recording requires ea
 
 ```
 browsers (module) ──▶ JSON files on the Foundry server ──ffr import──▶ SQLite ◀── ffr CLI ◀── Codex + AGENTS.md
-                   └──▶ optional self-hosted collector (Docker) ─────────────▶┘
+                   └──▶ optional self-hosted collector (Node) ───────────────▶┘
 ```
 
 No extra server is needed: recordings are stored by Foundry itself. A collector is optional.
@@ -35,7 +35,7 @@ npm run -s ffr -- around latest --event <id> --before 30s
 codex "Investigate the latest recorded session following AGENTS.md and write the report"
 ```
 
-UI in English and French (follows the Foundry language). Optional self-hosted collector (Docker, central
+UI in English and French (follows the Foundry language). Optional self-hosted collector (Node process, central
 database, retention, stricter privacy) and HTTPS setup: [docs/deployment.md](docs/deployment.md).
 
 Try it without Foundry: `npm run -s fixtures -- --db /tmp/fx.db` generates two synthetic PF2e sessions
@@ -67,4 +67,4 @@ flock /tmp/maxi.lock npm run e2e   # real Foundry run (needs a local licensed Fo
 ```
 
 Layout: `packages/schema` (shared), `packages/foundry-module`, `packages/collector`,
-`packages/analysis-cli`, `tests/`, `docker/`, `docs/`.
+`packages/analysis-cli`, `tests/`, `docs/`.

@@ -58,7 +58,7 @@ field's `name` attribute and kind. Friction notes are the only free text and are
 
 - The ingest key is visible to every connected browser (it is a world setting). It can only append events.
   There is no HTTP endpoint to read, export, delete or configure anything.
-- Administration = shell access to the collector host: `ffr` (or `docker compose exec collector node packages/analysis-cli/ffr.mjs`).
+- Administration = shell access to the collector host: `ffr`.
 - Collector controls: exact Origin allowlist, key check (constant time), 512 KiB body limit, 500 events per
   batch, per-IP request rate, per-client event rate, storage cap (HTTP 507), strict schema validation.
 - Store the database outside Foundry's `Data` directory (Foundry serves `Data` publicly).

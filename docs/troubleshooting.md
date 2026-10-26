@@ -10,9 +10,9 @@
 | HTTP 429 | Rate limits; raise `FFR_RATE_RPS`/`FFR_RATE_EPM` for big tables or diagnostic mode. Client retries with backoff. |
 | HTTP 507 | `FFR_MAX_DB_MB` reached: export/delete old sessions or raise the cap. |
 | Module not listed in Foundry | Restart Foundry after copying into `Data/modules`. |
-| `ffr: database not found` | Pass `--db` or `FFR_DB`; in Docker the DB is `/data/ffr.db` in the container. |
+| `ffr: database not found` | Pass `--db` or `FFR_DB` (after `ffr import` when no collector is used). |
 | Session still `active` | GM closed the tab without *Stop session*: `ffr finalize <s>` or wait `FFR_SESSION_IDLE_MIN`. |
 | `rec.loss` events / `seqMissing` | Client queue overflowed (collector unreachable > ~a few minutes at high event rates) or rate-limited types; see `ffr info`. |
 | No `perf.loaf` / `longTasks` | Browser lacks Long Animation Frames (Firefox/Safari); frame times are still measured. |
-| ExperimentalWarning about SQLite | Harmless (`node:sqlite`); npm scripts and the Docker image suppress it. |
+| ExperimentalWarning about SQLite | Harmless (`node:sqlite`); npm scripts suppress it. |
 | Console shows errors from `foundry-flight-recorder` | Should not happen: handlers are wrapped. `api.status().selfErrors` counts swallowed internal errors; please report with the session id. |

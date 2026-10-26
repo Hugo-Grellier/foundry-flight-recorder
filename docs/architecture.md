@@ -24,7 +24,6 @@
 | `packages/collector/` | `server.mjs` HTTP ingest, `db.mjs` storage + admin ops (retention, deletion, finalize) |
 | `packages/analysis-cli/` | `analyze.mjs` deterministic analyses, `ffr.mjs` CLI |
 | `tests/` | `node:test` suites, `fixtures/synth.mjs` synthetic sessions, `load.mjs`, `e2e/` real Foundry run |
-| `docker/` | collector image + compose |
 
 ## Decisions (ADR log)
 
@@ -58,7 +57,7 @@
     *Upload Files*, global) and world documents (would bloat the world database and broadcast changes).
     Clients that may upload write their own batch files, one per batch (non-media files cannot be
     overwritten: "already exists" on retry means stored); others relay over the module socket to the active
-    GM only, who writes and acks. *Why:* installing Docker and a reverse proxy kills adoption.
+    GM only, who writes and acks. *Why:* running an extra server and a reverse proxy kills adoption.
     *Trade-off:* Foundry serves `Data/` publicly (unguessable names, but browsable with *Browse File
     Explorer*); recording of non-uploading players needs a GM online; no retention. The collector stays.
 12. **Text/plain JSON POST** avoids CORS preflight; `sendBeacon` + localStorage persistence on `pagehide`.

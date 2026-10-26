@@ -28,19 +28,19 @@ Use the collector (below) for a central database, retention and stricter privacy
 ## 1. Collector (optional)
 
 ```bash
-cp .env.example .env            # set FFR_INGEST_KEY (openssl rand -hex 24) and FFR_ALLOWED_ORIGINS
-docker compose -f docker/compose.yml --env-file .env up -d --build
+# Node ≥ 22.13, no npm dependencies; run it under your process manager (systemd, pm2, ...)
+FFR_INGEST_KEY=$(openssl rand -hex 24) FFR_ALLOWED_ORIGINS=https://foundry.example.org FFR_DB=./data/ffr.db npm run collector
 curl -s http://127.0.0.1:4318/healthz
 ```
 
-Without Docker (Node ≥ 22.13): `FFR_INGEST_KEY=... FFR_ALLOWED_ORIGINS=... FFR_DB=./data/ffr.db npm run collector`.
+`.env.example` lists the variables.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `FFR_INGEST_KEY` | — (required) | append-only key, copied into the module settings |
 | `FFR_ALLOWED_ORIGINS` | — | exact browser origins of Foundry, comma separated (`*` only for tests) |
-| `FFR_HOST` / `FFR_PORT` | 127.0.0.1 / 4318 | listen address (container: 0.0.0.0) |
-| `FFR_DB` | ./data/ffr.db | SQLite file (container: /data/ffr.db) |
+| `FFR_HOST` / `FFR_PORT` | 127.0.0.1 / 4318 | listen address |
+| `FFR_DB` | ./data/ffr.db | SQLite file |
 | `FFR_RETENTION_DAYS` | 180 | 0 disables automatic deletion |
 | `FFR_MAX_DB_MB` | 2048 | refuse ingestion (507) above this size |
 | `FFR_SESSION_IDLE_MIN` | 240 | sessions without traffic are marked ended |
@@ -94,7 +94,5 @@ friction. GM: badge → *Stop session* at the end (otherwise the collector marks
 ## 5. Investigating
 
 On the collector host: `FFR_DB=./data/ffr.db npm run -s ffr -- digest latest`, or open the repo in Codex and
-ask it to investigate the latest session following AGENTS.md. In Docker:
-`docker compose -f docker/compose.yml exec collector node packages/analysis-cli/ffr.mjs sessions`
-(or copy `data/ffr.db` to your workstation; the DB is a single file — stop the collector or use
+ask it to investigate the latest session following AGENTS.md (or copy `data/ffr.db` to your workstation; the DB is a single file — stop the collector or use
 `sqlite3 ffr.db ".backup copy.db"` for a consistent copy).

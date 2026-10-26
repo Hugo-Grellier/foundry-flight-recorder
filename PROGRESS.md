@@ -48,3 +48,6 @@ See docs/architecture.md (ADR log).
   Verified against the V14 server code (upload rules, socket recipients, static serving of Data/); unit and
   import tests pass. Pending: one real-runtime check of the Foundry glue (upload, createDirectory, socket relay)
   before tagging v0.2.0.
+- Docker packaging removed (collector stays as an optional Node process). Prod collector, its Traefik route
+  (homelab revert 9d111d6) and the prod module copy removed; the module is to be reinstalled from the manifest.
+  Final prod DB (2 sessions) kept outside the repo.
